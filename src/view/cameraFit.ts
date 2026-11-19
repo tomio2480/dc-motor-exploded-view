@@ -40,3 +40,32 @@ export function fitDistance(
   }
   return distance;
 }
+
+/** これより短いベクトルは，向きを決められないものとして扱う． */
+const MIN_DIRECTION_LENGTH = 1e-9;
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
+function normalize(vector: Vec3, description: string): Vec3 {
+  const length = Math.hypot(...vector);
+  if (!(length > MIN_DIRECTION_LENGTH)) {
+    throw new RangeError(`${description}: ${vector.join(", ")}`);
+  }
+  return [vector[0] / length, vector[1] / length, vector[2] / length];
+}
+
+/** 注視点からカメラへ向かう方向から，上を y 軸の正とした画面の基底を求める． */
+export function viewBasis(toCamera: Vec3): ViewBasis {
+  const forward = normalize(toCamera, "視線の方向の長さが 0 である");
+  const right = normalize(
+    cross([0, 1, 0], forward),
+    "真上または真下からの視線では画面の右を決められない",
+  );
+  return { right, up: cross(forward, right), toCamera: forward };
+}

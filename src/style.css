@@ -522,12 +522,22 @@ body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
   .part-info {
     position: static;
     width: auto;
+    padding: 10px 14px 12px;
     margin: 0 var(--gutter) 10px;
     background: var(--surface-solid);
     box-shadow: none;
     /* 3D の上へ重ならないため，負荷の高いぼかしは使わない． */
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+
+  .part-info__role {
+    margin-top: 6px;
+  }
+
+  .part-info__description {
+    font-size: 0.88rem;
+    line-height: 1.55;
   }
 
   .stage__hint {

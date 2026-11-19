@@ -10,6 +10,12 @@ const chromiumLaunchOptions = {
   ...(chromiumPath === undefined ? {} : { executablePath: chromiumPath }),
 };
 
+/**
+ * GPU のない Linux では，画面なしの Firefox が WebGL を作れない．
+ * その場合は E2E_FIREFOX_HEADED=1 を指定し，xvfb-run の仮想画面の上で実行する．
+ */
+const isFirefoxHeaded = process.env.E2E_FIREFOX_HEADED === "1";
+
 export default defineConfig({
   testDir: "e2e",
   forbidOnly: process.env.CI !== undefined,
@@ -33,7 +39,14 @@ export default defineConfig({
     },
     {
       name: "firefox-desktop",
-      use: { ...devices["Desktop Firefox"] },
+      use: {
+        ...devices["Desktop Firefox"],
+        headless: !isFirefoxHeaded,
+        launchOptions: {
+          // ソフトウェア描画を理由に WebGL が無効化されないようにする．
+          firefoxUserPrefs: { "webgl.force-enabled": true },
+        },
+      },
     },
     {
       name: "webkit-desktop",

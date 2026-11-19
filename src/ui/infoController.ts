@@ -23,6 +23,8 @@ export interface InfoControllerOptions {
   /** 選択の変化を支援技術へ伝えるライブリージョン． */
   readonly announcer: HTMLElement;
   readonly labelButtons: ReadonlyMap<PartId, HTMLElement>;
+  /** 選択している部品が変わるたびに呼ぶ． */
+  readonly onSelectionChange: (id: PartId | null) => void;
 }
 
 /** 部品の選択とホバーの状態を持ち，解説の表示へ反映する． */
@@ -106,6 +108,10 @@ export function createInfoController(
       announce();
     }
     render();
+    if (hasSelectionChanged) {
+      // 解説欄の表示を切り替えたあとで，領域の大きさに合った視点を決めさせる．
+      options.onSelectionChange(selection.selected);
+    }
   }
 
   render();

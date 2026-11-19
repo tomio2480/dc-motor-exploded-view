@@ -106,10 +106,13 @@ jobs:
           BROWSER: ${{ matrix.browser }}
         run: npx playwright install --with-deps "${BROWSER}"
 
+      # GPU のない実行環境では，画面なしの Firefox が WebGL を作れない．
+      # 仮想画面の上で実行し，Firefox だけ画面ありで起動する．
       - name: Run E2E tests with axe-core
         env:
           BROWSER: ${{ matrix.browser }}
-        run: npm run test:e2e -- --trace off --project="${BROWSER}-*"
+          E2E_FIREFOX_HEADED: "1"
+        run: xvfb-run --auto-servernum npm run test:e2e -- --trace off --project="${BROWSER}-*"
 
       - name: Upload Playwright report
         if: ${{ failure() }}

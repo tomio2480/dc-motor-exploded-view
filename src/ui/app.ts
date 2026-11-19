@@ -21,6 +21,8 @@ export function startApp(): void {
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
   const portrait = window.matchMedia("(orientation: portrait)");
+  // style.css で解説欄を 3D の下へ並べる幅と合わせる．
+  const narrowLayout = window.matchMedia("(max-width: 640px)");
   const readLineColor = (): string =>
     getComputedStyle(stage).getPropertyValue("--line").trim();
 
@@ -61,6 +63,14 @@ export function startApp(): void {
     }
   }
 
+  /**
+   * 狭い画面では解説欄が 3D の領域を狭めるため，選んだ部品へ寄って大きく表示する．
+   * 広い画面では全体の表示を保つ．
+   */
+  function applyFocus(selected: PartId | null): void {
+    scene.setFocus(narrowLayout.matches ? selected : null);
+  }
+
   const info = createInfoController({
     highlight: scene.setHighlight,
     panel: createPartView(panelElement, closePanel),
@@ -68,6 +78,7 @@ export function startApp(): void {
     tooltipElement,
     announcer: requireElement("announcer", HTMLElement),
     labelButtons,
+    onSelectionChange: applyFocus,
   });
 
   function bindLabel(id: PartId, button: HTMLButtonElement): void {
@@ -122,6 +133,9 @@ export function startApp(): void {
   new ResizeObserver(scene.resize).observe(stage);
   portrait.addEventListener("change", () => {
     scene.setPortrait(portrait.matches);
+  });
+  narrowLayout.addEventListener("change", () => {
+    applyFocus(info.selected());
   });
   darkScheme.addEventListener("change", () => {
     scene.setLineColor(readLineColor());

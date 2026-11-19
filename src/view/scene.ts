@@ -25,7 +25,8 @@ import { buildMotorParts } from "../motor/buildParts";
 import { EXPLODE_OFFSETS, LABEL_LINES } from "../motor/layout";
 import { isPartId, PART_IDS, type PartId } from "../motor/parts";
 import type { Vec3 } from "../vec3";
-import { fitDistance } from "./cameraFit";
+import { fitDistance, viewBasis } from "./cameraFit";
+import { smoothingFactor } from "./ease";
 import { clampFactor, explodedOffset, labelOpacity } from "./explode";
 
 /** 番号ラベルを置く画面上の位置．描画領域の左上を原点とする CSS ピクセル． */
@@ -51,6 +52,8 @@ export interface MotorSceneOptions {
 export interface MotorScene {
   setFactor(factor: number): void;
   setHighlight(id: PartId | null): void;
+  /** 指定した部品へ寄って表示する．null を渡すと全体の表示へ戻す． */
+  setFocus(id: PartId | null): void;
   setLineColor(color: string): void;
   /** 画面上の位置にある部品を返す．部品がなければ null を返す． */
   pick(clientX: number, clientY: number): PartId | null;
@@ -68,14 +71,23 @@ export interface MotorScene {
 const FOV_DEGREES = 28;
 /** 画面の端と部品の間に残す余白の倍率． */
 const FIT_MARGIN = 1.14;
+/** 部品へ寄るときの余白の倍率．周りの部品も見えるよう広めに取る． */
+const FOCUS_MARGIN = 1.9;
+/** 視点を滑らかに移すときの時定数（ミリ秒）． */
+const VIEW_EASE_MS = 140;
+/** 目標との差がこの割合を下回ったら，視点の移動を終える． */
+const VIEW_SETTLE_RATIO = 0.002;
 const MAX_PIXEL_RATIO = 2;
 const TONE_EXPOSURE = 0.95;
 const ENVIRONMENT_INTENSITY = 0.7;
 const KEY_LIGHT_INTENSITY = 1.1;
-const HIGHLIGHT_COLOR = 0x1f8fff;
-const HIGHLIGHT_INTENSITY = 0.55;
+/**
+ * 注目中の部品を光らせる強さ．部品そのものの色で光らせ，色合いを変えない．
+ * 永久磁石の赤と青のように，色が意味を持つ部品の区別を保つためである．
+ */
+const HIGHLIGHT_INTENSITY = 0.6;
 /** 画角合わせで決めた距離に対する，拡大と縮小の限度． */
-const ZOOM_IN_LIMIT = 0.2;
+const ZOOM_IN_LIMIT = 0.05;
 const ZOOM_OUT_LIMIT = 2.5;
 /** 真上と真下を避けるための，垂直方向の角度の余裕． */
 const POLAR_MARGIN = 0.05;
@@ -86,13 +98,14 @@ const LANDSCAPE_VIEW: Vec3 = [0.5, 0.36, 1];
 const PORTRAIT_VIEW: Vec3 = [0.42, 0.16, 1];
 
 interface Piece {
+  readonly id: PartId;
   readonly object: Object3D;
   readonly offset: Vec3;
   readonly bounds: Box3;
 }
 
-/** 画角合わせで決めた注視点と距離．利用者による拡大と移動の基準にする． */
-interface FittedView {
+/** カメラの置き方．注視点と，注視点からカメラまでの距離で表す． */
+interface ViewPose {
   readonly target: Vector3;
   readonly distance: number;
 }
@@ -160,6 +173,10 @@ export function createMotorScene(
   controls.enableDamping = !options.reducedMotion;
   controls.minPolarAngle = POLAR_MARGIN;
   controls.maxPolarAngle = Math.PI - POLAR_MARGIN;
+  // 利用者が視点を動かし始めたら，自動の視点移動をやめる．
+  controls.addEventListener("start", () => {
+    goal = null;
+  });
 
   // 縦長の画面では軸を縦へ向けるため，モデル全体をこのグループごと回す．
   const root = new Group();
@@ -177,7 +194,12 @@ export function createMotorScene(
         throw new Error(`移動量の定義がない: ${id} の個片 ${index}`);
       }
       root.add(object);
-      pieces.push({ object, offset, bounds: new Box3().setFromObject(object) });
+      pieces.push({
+        id,
+        object,
+        offset,
+        bounds: new Box3().setFromObject(object),
+      });
       object.traverse((child) => {
         if (child instanceof Mesh) {
           pickables.push(child);
@@ -208,7 +230,13 @@ export function createMotorScene(
 
   let factor = 1;
   let isPortrait = options.portrait;
-  let fitted: FittedView | null = null;
+  /** 寄って表示している部品．全体を表示しているときは null． */
+  let focus: PartId | null = null;
+  /** 画角合わせで決めた視点．利用者による拡大と移動の基準にする． */
+  let fitted: ViewPose | null = null;
+  /** 滑らかに移している途中の，視点の行き先． */
+  let goal: ViewPose | null = null;
+  let lastFrameTime: number | null = null;
   let highlighted: PartId | null = null;
   let needsRender = true;
   const raycaster = new Raycaster();
@@ -225,11 +253,15 @@ export function createMotorScene(
     }
   }
 
-  /** 画角へ収める対象の点を，ワールド座標で返す． */
-  function framePoints(): Vector3[] {
+  /**
+   * 画角へ収める対象の点を，ワールド座標で返す．
+   * only を渡すと，その部品と引き出し線だけを対象にする．
+   */
+  function framePoints(only: PartId | null): Vector3[] {
     root.updateMatrixWorld(true);
+    const isIncluded = (id: PartId): boolean => only === null || only === id;
     const points: Vector3[] = [];
-    for (const piece of pieces) {
+    for (const piece of pieces.filter(({ id }) => isIncluded(id))) {
       const shift = new Vector3(...explodedOffset(piece.offset, factor));
       for (const corner of boxCorners(piece.bounds)) {
         points.push(corner.add(shift));
@@ -237,7 +269,7 @@ export function createMotorScene(
     }
     // ラベルの現れ方に合わせて引き出し線の先端を含め，画角の急な変化を避ける．
     const opacity = labelOpacity(factor);
-    for (const labelLine of labelLines) {
+    for (const labelLine of labelLines.filter(({ id }) => isIncluded(id))) {
       const shift = new Vector3(...explodedOffset(labelLine.offset, factor));
       points.push(
         labelLine.from.clone().lerp(labelLine.to, opacity).add(shift),
@@ -246,13 +278,37 @@ export function createMotorScene(
     return points.map((point) => root.localToWorld(point));
   }
 
-  /**
-   * 現在の視線の向きを保ったまま，全体が収まる距離へカメラを置く．
-   * keepUserView が真なら，利用者が変えた拡大率と注視点のずれを引き継ぐ．
-   */
-  function fitView(keepUserView: boolean): void {
-    const points = framePoints();
+  /** 点群の中心を注視点とし，すべての点が収まる距離を求める． */
+  function measureFit(
+    points: Vector3[],
+    direction: Vector3,
+    margin: number,
+  ): ViewPose {
     const target = new Box3().setFromPoints(points).getCenter(new Vector3());
+    const distance =
+      margin *
+      fitDistance(
+        points.map((point) => point.sub(target).toArray()),
+        viewBasis(direction.toArray()),
+        (camera.fov * Math.PI) / 180,
+        camera.aspect,
+      );
+    return { target, distance };
+  }
+
+  function applyPose(pose: ViewPose, direction: Vector3): void {
+    controls.target.copy(pose.target);
+    camera.position.copy(pose.target).addScaledVector(direction, pose.distance);
+    controls.update();
+    needsRender = true;
+  }
+
+  /**
+   * 現在の視線の向きを保ったまま，全体または寄っている部品が収まる視点を決める．
+   * keepUserView が真なら，利用者が変えた拡大率と注視点のずれを引き継ぐ．
+   * animate が真なら，その視点へ滑らかに移す．
+   */
+  function fitView(keepUserView: boolean, animate: boolean): void {
     const offset = camera.position.clone().sub(controls.target);
     const direction = offset.clone().normalize();
     const previous = keepUserView ? fitted : null;
@@ -262,37 +318,49 @@ export function createMotorScene(
         ? new Vector3()
         : controls.target.clone().sub(previous.target);
 
-    camera.position.copy(target).add(direction);
-    camera.lookAt(target);
-    camera.updateMatrixWorld();
-    const right = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
-    const up = new Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
-
-    const distance =
-      FIT_MARGIN *
-      fitDistance(
-        points.map((point) => point.sub(target).toArray()),
-        {
-          right: right.toArray(),
-          up: up.toArray(),
-          toCamera: direction.toArray(),
-        },
-        (camera.fov * Math.PI) / 180,
-        camera.aspect,
-      );
-    fitted = { target, distance };
-
-    controls.target.copy(target).add(pan);
-    controls.minDistance = distance * ZOOM_IN_LIMIT;
-    controls.maxDistance = distance * ZOOM_OUT_LIMIT;
-    camera.position
-      .copy(controls.target)
-      .addScaledVector(direction, distance * zoom);
-    camera.near = distance / 100;
-    camera.far = distance * 10;
+    const overview = measureFit(framePoints(null), direction, FIT_MARGIN);
+    fitted =
+      focus === null
+        ? overview
+        : measureFit(framePoints(focus), direction, FOCUS_MARGIN);
+    // 拡大と縮小の限度は，寄っているかどうかによらず全体の表示を基準にする．
+    controls.minDistance = overview.distance * ZOOM_IN_LIMIT;
+    controls.maxDistance = overview.distance * ZOOM_OUT_LIMIT;
+    camera.near = overview.distance / 200;
+    camera.far = overview.distance * 10;
     camera.updateProjectionMatrix();
-    controls.update();
-    needsRender = true;
+
+    const pose = {
+      target: fitted.target.clone().add(pan),
+      distance: fitted.distance * zoom,
+    };
+    if (animate && !options.reducedMotion) {
+      goal = pose;
+      needsRender = true;
+      return;
+    }
+    goal = null;
+    applyPose(pose, direction);
+  }
+
+  /** 視点を行き先へ近づける．十分に近づいたら移動を終える． */
+  function advanceGoal(elapsedMs: number): void {
+    if (goal === null) {
+      return;
+    }
+    const offset = camera.position.clone().sub(controls.target);
+    const ratio = smoothingFactor(elapsedMs, VIEW_EASE_MS);
+    const target = controls.target.clone().lerp(goal.target, ratio);
+    const distance =
+      offset.length() + (goal.distance - offset.length()) * ratio;
+    const tolerance = goal.distance * VIEW_SETTLE_RATIO;
+    const isSettled =
+      Math.abs(goal.distance - distance) < tolerance &&
+      target.distanceTo(goal.target) < tolerance;
+    applyPose(isSettled ? goal : { target, distance }, offset.normalize());
+    if (isSettled) {
+      goal = null;
+    }
   }
 
   /** モデルとカメラを，画面の向きに応じた初期の向きへ置く． */
@@ -304,7 +372,7 @@ export function createMotorScene(
 
   function resetView(): void {
     placeDefaultView();
-    fitView(false);
+    fitView(false, false);
   }
 
   function resize(): void {
@@ -315,7 +383,12 @@ export function createMotorScene(
     }
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
-    fitView(true);
+    if (goal === null) {
+      fitView(true, false);
+    } else {
+      // 視点を移している途中なら，新しい大きさでの行き先へ向け直す．
+      fitView(false, true);
+    }
   }
 
   function labelPositions(): LabelPosition[] {
@@ -331,12 +404,15 @@ export function createMotorScene(
     });
   }
 
-  function renderFrame(): void {
+  function renderFrame(time: number): void {
     requestAnimationFrame(renderFrame);
+    const elapsedMs = lastFrameTime === null ? 0 : time - lastFrameTime;
+    lastFrameTime = time;
     if (fitted === null) {
       // 描画領域がまだ大きさを持たない間は，画角を決められない．
       return;
     }
+    advanceGoal(elapsedMs);
     const hasMoved = controls.update();
     if (!needsRender && !hasMoved) {
       return;
@@ -351,7 +427,7 @@ export function createMotorScene(
       return;
     }
     for (const material of materialsByPart.get(id) ?? []) {
-      material.emissive.setHex(HIGHLIGHT_COLOR);
+      material.emissive.copy(material.color);
       material.emissiveIntensity = intensity;
     }
   }
@@ -370,7 +446,7 @@ export function createMotorScene(
       }
       factor = next;
       applyFactor();
-      fitView(false);
+      fitView(false, false);
     },
     setHighlight(id) {
       if (id === highlighted) {
@@ -380,6 +456,13 @@ export function createMotorScene(
       setEmissive(id, HIGHLIGHT_INTENSITY);
       highlighted = id;
       needsRender = true;
+    },
+    setFocus(id) {
+      if (id === focus) {
+        return;
+      }
+      focus = id;
+      fitView(false, true);
     },
     setLineColor(color) {
       lineMaterial.color.set(color);

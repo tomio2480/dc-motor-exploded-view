@@ -148,27 +148,59 @@ test.describe("3D 展開図", () => {
     await expect(label).toBeFocused();
   });
 
-  test("解説の表示で領域の大きさが変わっても，拡大した状態を保つ", async ({
-    page,
-  }) => {
-    const label = page.getByRole("button", { name: "4 シャフト" });
+  test("画面の大きさが変わっても，拡大した状態を保つ", async ({ page }) => {
+    const size = page.viewportSize();
+    if (size === null) {
+      throw new Error("画面の大きさを取得できない");
+    }
+    const smaller = { width: size.width, height: size.height - 120 };
+
     const fittedSpan = await labelSpan(page);
-    await label.click();
-    const fittedSpanWithInfo = await labelSpan(page);
-    await page.keyboard.press("Escape");
+    await page.setViewportSize(smaller);
+    const fittedSpanWhenSmaller = await labelSpan(page);
+    await page.setViewportSize(size);
 
     await page.keyboard.press("+");
     await page.keyboard.press("+");
     const zoomedSpan = await labelSpan(page);
     expect(zoomedSpan).toBeGreaterThan(fittedSpan * 1.2);
 
-    await label.click();
-    const zoomedSpanWithInfo = await labelSpan(page);
+    await page.setViewportSize(smaller);
+    const zoomedSpanWhenSmaller = await labelSpan(page);
     // 領域が変わった分の比率だけが変わり，拡大の倍率は変わらない．
-    expect(zoomedSpanWithInfo / zoomedSpan).toBeCloseTo(
-      fittedSpanWithInfo / fittedSpan,
+    expect(zoomedSpanWhenSmaller / zoomedSpan).toBeCloseTo(
+      fittedSpanWhenSmaller / fittedSpan,
       1,
     );
+  });
+
+  test("狭い画面で部品を選ぶと，その部品へ寄って大きく表示する", async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "狭い画面の検証である");
+    const label = page.getByRole("button", { name: "7 整流子" });
+    const overviewSpan = await labelSpan(page);
+
+    await label.click();
+    await expect(page.locator("#part-info")).toBeVisible();
+    expect(await labelSpan(page)).toBeGreaterThan(overviewSpan * 1.5);
+    await expect(label).toBeInViewport();
+
+    await page.getByRole("button", { name: "解説を閉じる" }).click();
+    const restoredSpan = await labelSpan(page);
+    expect(restoredSpan / overviewSpan).toBeCloseTo(1, 1);
+  });
+
+  test("広い画面では，部品を選んでも視点を変えない", async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "広い画面の検証である");
+    const overviewSpan = await labelSpan(page);
+    await page.getByRole("button", { name: "7 整流子" }).click();
+    await expect(page.locator("#part-info")).toBeVisible();
+    expect((await labelSpan(page)) / overviewSpan).toBeCloseTo(1, 2);
   });
 
   test("画面が小さいときは縦にスクロールして操作できる", async ({ page }) => {

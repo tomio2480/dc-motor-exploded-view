@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { fitDistance, type ViewBasis } from "../src/view/cameraFit";
+import { fitDistance, type ViewBasis, viewBasis } from "../src/view/cameraFit";
 
 const basis: ViewBasis = {
   right: [1, 0, 0],
@@ -50,4 +50,43 @@ describe("fitDistance", () => {
       );
     },
   );
+});
+
+describe("viewBasis", () => {
+  function expectVector(
+    actual: readonly number[],
+    expected: readonly number[],
+  ) {
+    actual.forEach((value, index) => {
+      expect(value).toBeCloseTo(expected[index] ?? Number.NaN);
+    });
+  }
+
+  test("正面から見るとき，右は x 軸，上は y 軸になる", () => {
+    const basis = viewBasis([0, 0, 1]);
+    expectVector(basis.right, [1, 0, 0]);
+    expectVector(basis.up, [0, 1, 0]);
+    expectVector(basis.toCamera, [0, 0, 1]);
+  });
+
+  test("右側から見るとき，画面の右は奥行きの負の向きになる", () => {
+    const basis = viewBasis([1, 0, 0]);
+    expectVector(basis.right, [0, 0, -1]);
+    expectVector(basis.up, [0, 1, 0]);
+  });
+
+  test("長さが 1 でない方向も，単位ベクトルの基底にする", () => {
+    const basis = viewBasis([0, 3, 4]);
+    expectVector(basis.toCamera, [0, 0.6, 0.8]);
+    expectVector(basis.right, [1, 0, 0]);
+    expectVector(basis.up, [0, 0.8, -0.6]);
+  });
+
+  test.each([
+    { direction: [0, 1, 0] as const },
+    { direction: [0, -2, 0] as const },
+    { direction: [0, 0, 0] as const },
+  ])("真上・真下・長さ 0 の方向 $direction は拒否する", ({ direction }) => {
+    expect(() => viewBasis(direction)).toThrow(RangeError);
+  });
 });

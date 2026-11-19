@@ -56,6 +56,7 @@ GitHub Pages で公開している．
 |---|---|
 | 部品へマウスを重ねる | ポインターの近くへ解説を表示する |
 | 部品または番号をクリック・タップ | 解説を固定して表示する．もう一度選ぶと閉じる |
+| 狭い画面で部品を選ぶ | 選んだ部品へ寄って大きく表示する．解説を閉じると全体へ戻る |
 | ドラッグ | 視点を回転する |
 | ホイール・ピンチ | 拡大と縮小を行う |
 | 矢印キー | 視点を回転する |
@@ -110,6 +111,13 @@ npm run test:e2e -- --project="chromium-*"
 
 既定以外の Chromium を使う場合は，環境変数 `PLAYWRIGHT_CHROMIUM_PATH` へ実行ファイルのパスを指定する．
 
+GPU のない Linux では，画面なしの Firefox が WebGL を作れない．
+その場合は，仮想画面の上で Firefox を画面ありで起動する．
+
+```bash
+E2E_FIREFOX_HEADED=1 xvfb-run --auto-servernum npm run test:e2e -- --project="firefox-*"
+```
+
 ### 複雑度の検査
 
 保守しやすさを保つため，関数ごとの複雑度へ上限を設けている．
@@ -161,6 +169,7 @@ cccc は入れ子の関数を別の単位として数えるため，外側の関
 WebGL 2 に対応した Chrome・Firefox・Safari・Edge の現行版を対象とする．
 WebGL を使えない環境では，3D の代わりに全部品の解説を文章で表示する．
 CI では Chromium・Firefox・WebKit（Safari と同じ描画エンジン）で E2E テストを実行する．
+画面の設定は，デスクトップに加えて Pixel 7 と iPhone 15 を使う．
 WebKit での検証は実機の Safari の代わりにはならないため，iOS の実機での確認も別に行う．
 
 ### 動作の軽さ
