@@ -521,7 +521,10 @@ body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
     position: static;
     width: auto;
     margin: 0 var(--gutter) 10px;
+    background: var(--surface-solid);
     box-shadow: none;
+    /* 3D の上へ重ならないため，負荷の高いぼかしは使わない． */
+    backdrop-filter: none;
   }
 
   .stage__hint {

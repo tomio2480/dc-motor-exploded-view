@@ -14,6 +14,7 @@ import {
   Vector2,
   Vector3,
 } from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import {
   BEARING,
   BRUSH,
@@ -111,6 +112,22 @@ function createMesh(
   return mesh;
 }
 
+/**
+ * 同じ材質の形状を 1 つのメッシュへまとめる．
+ * 描画命令の数を減らし，スマートフォンでの描画の負荷を抑える．
+ */
+function createMergedMesh(
+  partId: PartId,
+  geometries: BufferGeometry[],
+  material: Material,
+): Mesh {
+  const merged = mergeGeometries(geometries);
+  if (merged === null) {
+    throw new Error(`形状をまとめられない: ${partId}`);
+  }
+  return createMesh(partId, merged, material);
+}
+
 function createPiece(partId: PartId, meshes: readonly Mesh[]): Group {
   const piece = new Group();
   piece.userData.partId = partId;
@@ -147,15 +164,13 @@ function buildCase(): Object3D[] {
 
   return [
     createPiece("case", [
-      createMesh("case", extrudeAlongX(tube, CASE.rearX, plateRearX), material),
-      createMesh(
+      createMergedMesh(
         "case",
-        extrudeAlongX(frontPlate, plateRearX, CASE.frontX),
-        material,
-      ),
-      createMesh(
-        "case",
-        extrudeAlongX(boss, CASE.frontX, CASE.frontX + CASE.bossLength),
+        [
+          extrudeAlongX(tube, CASE.rearX, plateRearX),
+          extrudeAlongX(frontPlate, plateRearX, CASE.frontX),
+          extrudeAlongX(boss, CASE.frontX, CASE.frontX + CASE.bossLength),
+        ],
         material,
       ),
     ]),
@@ -231,16 +246,17 @@ function buildCore(): Object3D[] {
   const totalGap = CORE.laminationGap * (CORE.laminationCount - 1);
   const thickness = (length - totalGap) / CORE.laminationCount;
   const pitch = thickness + CORE.laminationGap;
-  const geometry = extrudeAlongX(lamination, 0, thickness);
-  const material = metal(0x80848b, 0.55);
+  const sheet = extrudeAlongX(lamination, 0, thickness);
 
-  const meshes: Mesh[] = [];
+  const sheets: BufferGeometry[] = [];
   for (let index = 0; index < CORE.laminationCount; index += 1) {
-    const mesh = createMesh("core", geometry, material);
-    mesh.position.x = CORE.rearX + index * pitch;
-    meshes.push(mesh);
+    sheets.push(sheet.clone().translate(CORE.rearX + index * pitch, 0, 0));
   }
-  return [createPiece("core", meshes)];
+  return [
+    createPiece("core", [
+      createMergedMesh("core", sheets, metal(0x80848b, 0.55)),
+    ]),
+  ];
 }
 
 /** 柱を囲む角の丸い輪を，巻線 1 層ぶんの断面として返す． */
@@ -297,7 +313,7 @@ function buildWindings(): Object3D[] {
     (WINDING.outerRadius - WINDING.innerRadius) / WINDING.layerCount;
   // 層の角を丸め，重ねた層の境目を電線の並びのように見せる．
   const bevel = layerDepth / 4;
-  const geometry = new ExtrudeGeometry(coilLayerShape(), {
+  const layerGeometry = new ExtrudeGeometry(coilLayerShape(), {
     depth: layerDepth - 2 * bevel,
     bevelEnabled: true,
     bevelThickness: bevel,
@@ -306,45 +322,46 @@ function buildWindings(): Object3D[] {
     bevelSegments: 2,
     curveSegments: ARC_SEGMENTS / 2,
   });
-  const material = metal(0xc56a33, 0.42);
   const centerX = (CORE.frontX + CORE.rearX) / 2;
   const axial = new Vector3(1, 0, 0);
 
-  const meshes: Mesh[] = [];
+  const layers: BufferGeometry[] = [];
   for (let pole = 0; pole < CORE.poleCount; pole += 1) {
     const angle = CORE.startAngle + (pole * FULL_TURN) / CORE.poleCount;
     const radial = new Vector3(0, Math.cos(angle), Math.sin(angle));
     const tangential = new Vector3(0, -Math.sin(angle), Math.cos(angle));
     // 層の断面の (幅，軸方向，重ねる方向) を，突起の (接線，x 軸，半径) へ向ける．
-    const orientation = new Matrix4().makeBasis(tangential, axial, radial);
+    const placement = new Matrix4().makeBasis(tangential, axial, radial);
 
     for (let layer = 0; layer < WINDING.layerCount; layer += 1) {
       const radius = WINDING.innerRadius + bevel + layer * layerDepth;
-      const mesh = createMesh("windings", geometry, material);
-      mesh.applyMatrix4(orientation);
-      mesh.position.copy(radial).multiplyScalar(radius).setX(centerX);
-      meshes.push(mesh);
+      placement.setPosition(
+        radial.clone().multiplyScalar(radius).setX(centerX),
+      );
+      layers.push(layerGeometry.clone().applyMatrix4(placement));
     }
   }
-  return [createPiece("windings", meshes)];
+  return [
+    createPiece("windings", [
+      createMergedMesh("windings", layers, metal(0xc56a33, 0.42)),
+    ]),
+  ];
 }
 
 function buildCommutator(): Object3D[] {
   const insulator = circleShape(COMMUTATOR.hubRadius);
   insulator.holes.push(circlePath(SHAFT.radius));
-  const meshes = [
-    createMesh(
-      "commutator",
-      extrudeAlongX(
-        insulator,
-        COMMUTATOR.rearX - COMMUTATOR.hubOverhang,
-        COMMUTATOR.frontX + COMMUTATOR.hubOverhang,
-      ),
-      nonMetal(0x4d3d34, 0.8),
+  const insulatorMesh = createMesh(
+    "commutator",
+    extrudeAlongX(
+      insulator,
+      COMMUTATOR.rearX - COMMUTATOR.hubOverhang,
+      COMMUTATOR.frontX + COMMUTATOR.hubOverhang,
     ),
-  ];
+    nonMetal(0x4d3d34, 0.8),
+  );
 
-  const copper = metal(0xd98f58, 0.3);
+  const segments: BufferGeometry[] = [];
   const segmentStep = FULL_TURN / COMMUTATOR.segmentCount;
   // 銅片の切れ目を突起の向きへ合わせ，上下のブラシが別の銅片へ触れるようにする．
   const firstCenter = CORE.startAngle + segmentStep / 2;
@@ -360,15 +377,14 @@ function buildCommutator(): Object3D[] {
         }),
       ),
     );
-    meshes.push(
-      createMesh(
-        "commutator",
-        extrudeAlongX(segment, COMMUTATOR.rearX, COMMUTATOR.frontX),
-        copper,
-      ),
-    );
+    segments.push(extrudeAlongX(segment, COMMUTATOR.rearX, COMMUTATOR.frontX));
   }
-  return [createPiece("commutator", meshes)];
+  return [
+    createPiece("commutator", [
+      insulatorMesh,
+      createMergedMesh("commutator", segments, metal(0xd98f58, 0.3)),
+    ]),
+  ];
 }
 
 /** 上側（+1）と下側（-1）．2 個の部品は軸について点対称に置く． */
@@ -467,27 +483,21 @@ function buildEndBell(): Object3D[] {
 
   return [
     createPiece("endBell", [
-      createMesh(
+      createMergedMesh(
         "endBell",
-        extrudeAlongX(cover, END_BELL.rearX, END_BELL.frontX),
-        material,
-      ),
-      createMesh(
-        "endBell",
-        extrudeAlongX(
-          lip,
-          END_BELL.frontX,
-          END_BELL.frontX + END_BELL.lipLength,
-        ),
-        material,
-      ),
-      createMesh(
-        "endBell",
-        extrudeAlongX(
-          circleShape(END_BELL.bossRadius),
-          END_BELL.rearX - END_BELL.bossLength,
-          END_BELL.rearX,
-        ),
+        [
+          extrudeAlongX(cover, END_BELL.rearX, END_BELL.frontX),
+          extrudeAlongX(
+            lip,
+            END_BELL.frontX,
+            END_BELL.frontX + END_BELL.lipLength,
+          ),
+          extrudeAlongX(
+            circleShape(END_BELL.bossRadius),
+            END_BELL.rearX - END_BELL.bossLength,
+            END_BELL.rearX,
+          ),
+        ],
         material,
       ),
     ]),

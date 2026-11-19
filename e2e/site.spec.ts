@@ -22,6 +22,17 @@ async function canvasCenter(page: Page): Promise<{ x: number; y: number }> {
 
 /** 2 つの番号ラベルの間隔を，表示の拡大率の目安として返す． */
 async function labelSpan(page: Page): Promise<number> {
+  // 領域の大きさの変化が描画と番号の配置へ反映されるまで，2 フレーム待つ．
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
   const first = await page
     .getByRole("button", { name: "1 軸受" })
     .boundingBox();

@@ -6,6 +6,8 @@ import { EXPLODE_OFFSETS, LABEL_LINES } from "../src/motor/layout";
 import { PART_IDS, type PartId } from "../src/motor/parts";
 
 const TOLERANCE = 1e-6;
+/** 材質と個片が異なるものだけを別のメッシュにしたときの総数． */
+const MAX_MESH_COUNT = 14;
 const parts = buildMotorParts();
 const eachPart = PART_IDS.map((id) => ({ id }));
 
@@ -72,6 +74,14 @@ describe("部品の構成", () => {
     const line = LABEL_LINES[id];
     expect(parts[id][line.piece]).toBeDefined();
     expect(line.from).not.toEqual(line.to);
+  });
+
+  test("描画命令を抑えるため，メッシュの総数を少なく保つ", () => {
+    const meshCount = PART_IDS.reduce(
+      (count, id) => count + meshesOf(parts[id]).length,
+      0,
+    );
+    expect(meshCount).toBeLessThanOrEqual(MAX_MESH_COUNT);
   });
 
   test("永久磁石とブラシと端子は 2 個ずつある", () => {
