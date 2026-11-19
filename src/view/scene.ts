@@ -27,6 +27,11 @@ import { isPartId, PART_IDS, type PartId } from "../motor/parts";
 import type { Vec3 } from "../vec3";
 import { fitDistance, viewBasis } from "./cameraFit";
 import { smoothingFactor } from "./ease";
+import {
+  createMechanismOverlay,
+  type MarkerTone,
+  type MechanismView,
+} from "./mechanismOverlay";
 import { clampFactor, explodedOffset, labelOpacity } from "./explode";
 
 /** 番号ラベルを置く画面上の位置．描画領域の左上を原点とする CSS ピクセル． */
@@ -36,21 +41,44 @@ export interface LabelPosition {
   readonly y: number;
 }
 
+/** 3D 上の位置へ重ねる記号の，画面上の位置と内容． */
+export interface MarkerPosition {
+  readonly id: string;
+  readonly text: string;
+  readonly tone: MarkerTone;
+  readonly isVisible: boolean;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** 表示の種類．parts は部品の展開図，mechanism は回るしくみの説明． */
+export type ViewMode = "parts" | "mechanism";
+
+/** 描画のたびに，HTML の重ね表示へ渡す内容． */
+export interface RenderInfo {
+  readonly labels: readonly LabelPosition[];
+  /** 番号ラベルの不透明度． */
+  readonly labelOpacity: number;
+  /** 回るしくみの記号．展開図の表示では空になる． */
+  readonly markers: readonly MarkerPosition[];
+}
+
 export interface MotorSceneOptions {
   readonly reducedMotion: boolean;
   /** 縦長の画面かどうか．縦長ではモーターの軸を縦へ向ける． */
   readonly portrait: boolean;
   /** 引き出し線の色．CSS の色表記で渡す． */
   readonly lineColor: string;
-  /** 描画のたびに，番号ラベルの位置と不透明度を受け取る． */
-  readonly onRender: (
-    labels: readonly LabelPosition[],
-    opacity: number,
-  ) => void;
+  /** 描画のたびに，番号ラベルと記号の位置を受け取る． */
+  readonly onRender: (info: RenderInfo) => void;
 }
 
 export interface MotorScene {
   setFactor(factor: number): void;
+  /** 展開図の表示と，回るしくみの表示を切り替える． */
+  setMode(mode: ViewMode): void;
+  /** 回るしくみの表示で，回転子の角度と，電流・極・力の示し方を変える． */
+  setMechanism(view: MechanismView): void;
   setHighlight(id: PartId | null): void;
   /** 指定した部品へ寄って表示する．null を渡すと全体の表示へ戻す． */
   setFocus(id: PartId | null): void;
@@ -91,6 +119,38 @@ const ZOOM_IN_LIMIT = 0.05;
 const ZOOM_OUT_LIMIT = 2.5;
 /** 真上と真下を避けるための，垂直方向の角度の余裕． */
 const POLAR_MARGIN = 0.05;
+
+/**
+ * 回るしくみの表示での画角．
+ * 手前へ伸びる端子が遠近法で大きく写らないよう，遠くから狭い画角で見る．
+ */
+const MECHANISM_FOV_DEGREES = 7;
+/**
+ * 回るしくみの表示で，注視点からカメラへ向かう方向．
+ * 整流子の側から軸に沿って，少し上から見る．
+ * 左右へは振らず，板状の端子を薄い側から見て，回転子を隠さないようにする．
+ */
+const MECHANISM_VIEW: Vec3 = [-1, 0.3, 0];
+/** 回転子として一体で回る部品． */
+const ROTOR_PART_IDS: ReadonlySet<PartId> = new Set([
+  "shaft",
+  "core",
+  "windings",
+  "commutator",
+]);
+/** 回るしくみの表示では，中が見えるよう外側の部品を隠す． */
+const HIDDEN_IN_MECHANISM: ReadonlySet<PartId> = new Set([
+  "bearing",
+  "case",
+  "endBell",
+]);
+const INITIAL_MECHANISM_VIEW: MechanismView = {
+  rotorAngle: 0,
+  polarity: 1,
+  currentReach: "none",
+  showsPoles: false,
+  showsForces: false,
+};
 
 /** 横長の画面で，注視点からカメラへ向かう方向． */
 const LANDSCAPE_VIEW: Vec3 = [0.5, 0.36, 1];
@@ -181,6 +241,9 @@ export function createMotorScene(
   // 縦長の画面では軸を縦へ向けるため，モデル全体をこのグループごと回す．
   const root = new Group();
   scene.add(root);
+  // 回転子の部品は，回るしくみの表示で一体として回すためにまとめる．
+  const rotor = new Group();
+  root.add(rotor);
 
   const parts = buildMotorParts();
   const pieces: Piece[] = [];
@@ -193,7 +256,7 @@ export function createMotorScene(
       if (offset === undefined) {
         throw new Error(`移動量の定義がない: ${id} の個片 ${index}`);
       }
-      root.add(object);
+      (ROTOR_PART_IDS.has(id) ? rotor : root).add(object);
       pieces.push({
         id,
         object,
@@ -207,6 +270,10 @@ export function createMotorScene(
       });
     });
   }
+
+  const overlay = createMechanismOverlay(parts);
+  rotor.add(overlay.rotorObjects);
+  root.add(overlay.fixedObjects);
 
   const lineMaterial = new LineBasicMaterial({
     color: new Color(options.lineColor),
@@ -237,18 +304,27 @@ export function createMotorScene(
   /** 滑らかに移している途中の，視点の行き先． */
   let goal: ViewPose | null = null;
   let lastFrameTime: number | null = null;
+  let mode: ViewMode = "parts";
+  let mechanismView = INITIAL_MECHANISM_VIEW;
   let highlighted: PartId | null = null;
   let needsRender = true;
   const raycaster = new Raycaster();
 
+  /** 回るしくみの表示では，利用者が選んだ展開度によらず組立状態で示す． */
+  function shownFactor(): number {
+    return mode === "mechanism" ? 0 : factor;
+  }
+
   function applyFactor(): void {
     for (const piece of pieces) {
-      piece.object.position.set(...explodedOffset(piece.offset, factor));
+      piece.object.position.set(...explodedOffset(piece.offset, shownFactor()));
     }
-    const opacity = labelOpacity(factor);
+    const opacity = labelOpacity(shownFactor());
     lineMaterial.opacity = opacity;
     for (const labelLine of labelLines) {
-      labelLine.line.position.set(...explodedOffset(labelLine.offset, factor));
+      labelLine.line.position.set(
+        ...explodedOffset(labelLine.offset, shownFactor()),
+      );
       labelLine.line.visible = opacity > 0;
     }
   }
@@ -261,16 +337,21 @@ export function createMotorScene(
     root.updateMatrixWorld(true);
     const isIncluded = (id: PartId): boolean => only === null || only === id;
     const points: Vector3[] = [];
-    for (const piece of pieces.filter(({ id }) => isIncluded(id))) {
-      const shift = new Vector3(...explodedOffset(piece.offset, factor));
+    const isShown = (piece: Piece): boolean =>
+      piece.object.visible && isIncluded(piece.id);
+    for (const piece of pieces.filter(isShown)) {
+      const shift = new Vector3(...explodedOffset(piece.offset, shownFactor()));
       for (const corner of boxCorners(piece.bounds)) {
         points.push(corner.add(shift));
       }
     }
     // ラベルの現れ方に合わせて引き出し線の先端を含め，画角の急な変化を避ける．
-    const opacity = labelOpacity(factor);
-    for (const labelLine of labelLines.filter(({ id }) => isIncluded(id))) {
-      const shift = new Vector3(...explodedOffset(labelLine.offset, factor));
+    const opacity = labelOpacity(shownFactor());
+    const framedLines = mode === "parts" ? labelLines : [];
+    for (const labelLine of framedLines.filter(({ id }) => isIncluded(id))) {
+      const shift = new Vector3(
+        ...explodedOffset(labelLine.offset, shownFactor()),
+      );
       points.push(
         labelLine.from.clone().lerp(labelLine.to, opacity).add(shift),
       );
@@ -365,8 +446,16 @@ export function createMotorScene(
 
   /** モデルとカメラを，画面の向きに応じた初期の向きへ置く． */
   function placeDefaultView(): void {
-    root.rotation.z = isPortrait ? Math.PI / 2 : 0;
     controls.target.set(0, 0, 0);
+    if (mode === "mechanism") {
+      // 軸に沿って見る表示は縦横どちらの画面にも収まるため，モデルを回さない．
+      root.rotation.z = 0;
+      camera.fov = MECHANISM_FOV_DEGREES;
+      camera.position.set(...MECHANISM_VIEW);
+      return;
+    }
+    camera.fov = FOV_DEGREES;
+    root.rotation.z = isPortrait ? Math.PI / 2 : 0;
     camera.position.set(...(isPortrait ? PORTRAIT_VIEW : LANDSCAPE_VIEW));
   }
 
@@ -392,16 +481,31 @@ export function createMotorScene(
   }
 
   function labelPositions(): LabelPosition[] {
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    return labelLines.map(({ id, line, to }) => {
-      const projected = line.localToWorld(to.clone()).project(camera);
-      return {
-        id,
-        x: ((projected.x + 1) / 2) * width,
-        y: ((1 - projected.y) / 2) * height,
-      };
-    });
+    return labelLines.map(({ id, line, to }) => ({
+      id,
+      ...projectToCanvas(line.localToWorld(to.clone())),
+    }));
+  }
+
+  function projectToCanvas(worldPoint: Vector3): { x: number; y: number } {
+    const projected = worldPoint.project(camera);
+    return {
+      x: ((projected.x + 1) / 2) * canvas.clientWidth,
+      y: ((1 - projected.y) / 2) * canvas.clientHeight,
+    };
+  }
+
+  function markerPositions(): MarkerPosition[] {
+    if (mode !== "mechanism") {
+      return [];
+    }
+    return overlay.markers(mechanismView).map((anchor) => ({
+      id: anchor.id,
+      text: anchor.text,
+      tone: anchor.tone,
+      isVisible: anchor.isVisible,
+      ...projectToCanvas(root.localToWorld(anchor.position)),
+    }));
   }
 
   function renderFrame(time: number): void {
@@ -419,7 +523,11 @@ export function createMotorScene(
     }
     needsRender = false;
     renderer.render(scene, camera);
-    options.onRender(labelPositions(), labelOpacity(factor));
+    options.onRender({
+      labels: labelPositions(),
+      labelOpacity: labelOpacity(shownFactor()),
+      markers: markerPositions(),
+    });
   }
 
   function setEmissive(id: PartId | null, intensity: number): void {
@@ -448,6 +556,36 @@ export function createMotorScene(
       applyFactor();
       fitView(false, false);
     },
+    setMode(next) {
+      if (next === mode) {
+        return;
+      }
+      mode = next;
+      const isMechanism = mode === "mechanism";
+      for (const piece of pieces) {
+        piece.object.visible =
+          !isMechanism || !HIDDEN_IN_MECHANISM.has(piece.id);
+      }
+      setEmissive(highlighted, 0);
+      highlighted = null;
+      focus = null;
+      overlay.setActive(isMechanism);
+      if (isMechanism) {
+        overlay.update(mechanismView);
+      }
+      rotor.rotation.x = isMechanism ? mechanismView.rotorAngle : 0;
+      applyFactor();
+      resetView();
+    },
+    setMechanism(view) {
+      mechanismView = view;
+      if (mode !== "mechanism") {
+        return;
+      }
+      overlay.update(view);
+      rotor.rotation.x = view.rotorAngle;
+      needsRender = true;
+    },
     setHighlight(id) {
       if (id === highlighted) {
         return;
@@ -469,6 +607,10 @@ export function createMotorScene(
       needsRender = true;
     },
     pick(clientX, clientY) {
+      if (mode === "mechanism") {
+        // 回るしくみの表示では，部品の解説を出さない．
+        return null;
+      }
       const rect = canvas.getBoundingClientRect();
       const pointer = new Vector2(
         ((clientX - rect.left) / rect.width) * 2 - 1,

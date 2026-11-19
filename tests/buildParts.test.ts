@@ -1,13 +1,21 @@
 import { Box3, Mesh, type Object3D, Vector3 } from "three";
 import { describe, expect, test } from "vitest";
 import { buildMotorParts } from "../src/motor/buildParts";
-import { CASE, MAGNET } from "../src/motor/dimensions";
+import {
+  CASE,
+  COMMUTATOR,
+  CORE,
+  MAGNET,
+  WINDING,
+} from "../src/motor/dimensions";
 import { EXPLODE_OFFSETS, LABEL_LINES } from "../src/motor/layout";
 import { PART_IDS, type PartId } from "../src/motor/parts";
 
 const TOLERANCE = 1e-6;
 /** 材質と個片が異なるものだけを別のメッシュにしたときの総数． */
-const MAX_MESH_COUNT = 14;
+const MAX_MESH_COUNT = 18;
+/** 巻線の層の丸みを引き出し線と取り違えないための余裕． */
+const LEAD_REGION_MARGIN = 0.05;
 const parts = buildMotorParts();
 const eachPart = PART_IDS.map((id) => ({ id }));
 
@@ -88,6 +96,76 @@ describe("部品の構成", () => {
     expect(parts.magnets).toHaveLength(2);
     expect(parts.brushes).toHaveLength(2);
     expect(parts.terminals).toHaveLength(2);
+  });
+});
+
+describe("巻線と整流子の配線", () => {
+  /** メッシュに付けた極または銅片の番号を，小さい順に返す． */
+  function indexesOf(id: PartId, key: "pole" | "segment"): number[] {
+    return meshesOf(parts[id])
+      .map((mesh): unknown => mesh.userData[key])
+      .filter((value): value is number => typeof value === "number")
+      .sort((a, b) => a - b);
+  }
+
+  test("巻線は極ごとに別のメッシュを持つ", () => {
+    expect(indexesOf("windings", "pole")).toEqual(
+      Array.from({ length: CORE.poleCount }, (_, index) => index),
+    );
+  });
+
+  test("整流子の銅片は 1 枚ごとに別のメッシュを持つ", () => {
+    expect(indexesOf("commutator", "segment")).toEqual(
+      Array.from({ length: COMMUTATOR.segmentCount }, (_, index) => index),
+    );
+  });
+
+  test("極ごとの巻線は，それぞれ別の材質を持つ", () => {
+    const materials = meshesOf(parts.windings).map((mesh) => mesh.material);
+    expect(new Set(materials).size).toBe(CORE.poleCount);
+  });
+
+  test("巻線の引き出し線は，整流子の銅片の位置まで届く", () => {
+    expect(boundsOf("windings", false).min.x).toBeLessThan(COMMUTATOR.frontX);
+  });
+
+  test("整流子は，引き出し線をつなぐ突起を銅片の外側に持つ", () => {
+    const radius = maxRadiusOf("commutator");
+    expect(radius).toBeGreaterThan(COMMUTATOR.outerRadius + 0.3);
+    expect(radius).toBeLessThan(MAGNET.innerRadius);
+  });
+
+  test("引き出し線は，整流子より内側のシャフトの側を通らない", () => {
+    // 巻線の後ろの端より後ろにある頂点は，引き出し線だけである．
+    const coilRearX = CORE.rearX - WINDING.thickness;
+    const vertex = new Vector3();
+    let innermost = Number.POSITIVE_INFINITY;
+    for (const mesh of meshesOf(parts.windings)) {
+      const positions = mesh.geometry.getAttribute("position");
+      for (let index = 0; index < positions.count; index += 1) {
+        vertex.fromBufferAttribute(positions, index);
+        if (vertex.x < coilRearX - LEAD_REGION_MARGIN) {
+          innermost = Math.min(innermost, Math.hypot(vertex.y, vertex.z));
+        }
+      }
+    }
+    expect(innermost).toBeGreaterThan(COMMUTATOR.outerRadius);
+  });
+
+  test("引き出し線の先は，整流子の突起の高さにある", () => {
+    // 巻線のうち整流子の前端より後ろにある頂点は，引き出し線の先端である．
+    const vertex = new Vector3();
+    let closest = Number.POSITIVE_INFINITY;
+    for (const mesh of meshesOf(parts.windings)) {
+      const positions = mesh.geometry.getAttribute("position");
+      for (let index = 0; index < positions.count; index += 1) {
+        vertex.fromBufferAttribute(positions, index);
+        if (vertex.x < COMMUTATOR.frontX) {
+          closest = Math.min(closest, Math.hypot(vertex.y, vertex.z));
+        }
+      }
+    }
+    expect(closest).toBeLessThanOrEqual(COMMUTATOR.tabOuterRadius + 0.3);
   });
 });
 

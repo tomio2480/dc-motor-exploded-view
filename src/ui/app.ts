@@ -1,12 +1,19 @@
 import type { PartId } from "../motor/parts";
-import { createMotorScene, type LabelPosition } from "../view/scene";
+import {
+  createMotorScene,
+  type RenderInfo,
+  type ViewMode,
+} from "../view/scene";
 import { requireElement } from "./dom";
 import { startExplodeController } from "./explodeController";
 import { createInfoController } from "./infoController";
 import { bindKeyboard } from "./keyboardInput";
+import { createMarkerLayer } from "./markers";
+import { startMechanismController } from "./mechanismController";
 import { createLabelButtons, createPartsList } from "./partLists";
 import { createPartView } from "./partView";
 import { bindCanvasPointer } from "./pointerInput";
+import { bindTabs } from "./tabs";
 
 /** 画面の要素と 3D 表示をつなぎ，操作を受け付ける． */
 export function startApp(): void {
@@ -17,6 +24,7 @@ export function startApp(): void {
   const tooltipElement = requireElement("part-tooltip", HTMLElement);
   const partsPanel = requireElement("parts-panel", HTMLDetailsElement);
   const partsSummary = requireElement("parts-summary", HTMLElement);
+  const tabList = requireElement("tabs", HTMLElement);
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -31,24 +39,26 @@ export function startApp(): void {
     reducedMotion: reducedMotion.matches,
     portrait: portrait.matches,
     lineColor: readLineColor(),
-    onRender: placeLabels,
+    onRender: placeOverlays,
   });
 
   const labelButtons = createLabelButtons(labelList);
+  const placeMarkers = createMarkerLayer(
+    requireElement("markers", HTMLElement),
+  );
 
-  function placeLabels(
-    positions: readonly LabelPosition[],
-    opacity: number,
-  ): void {
-    labelList.style.opacity = String(opacity);
+  /** 番号ラベルと記号を，3D 上の位置へ合わせる． */
+  function placeOverlays(info: RenderInfo): void {
+    labelList.style.opacity = String(info.labelOpacity);
     // 見えない番号へフォーカスが移らないよう，表示そのものを切り替える．
-    labelList.hidden = opacity === 0;
-    for (const position of positions) {
+    labelList.hidden = info.labelOpacity === 0;
+    for (const position of info.labels) {
       const button = labelButtons.get(position.id);
       if (button !== undefined) {
         button.style.transform = `translate(${position.x}px, ${position.y}px)`;
       }
     }
+    placeMarkers(info.markers);
   }
 
   /** 解説を閉じたあと，選んでいた部品の番号へフォーカスを戻す． */
@@ -63,12 +73,15 @@ export function startApp(): void {
     }
   }
 
+  let mode: ViewMode = "parts";
+
   /**
    * 狭い画面では解説欄が 3D の領域を狭めるため，選んだ部品へ寄って大きく表示する．
    * 広い画面では全体の表示を保つ．
    */
   function applyFocus(selected: PartId | null): void {
-    scene.setFocus(narrowLayout.matches ? selected : null);
+    const isFocusing = mode === "parts" && narrowLayout.matches;
+    scene.setFocus(isFocusing ? selected : null);
   }
 
   const info = createInfoController({
@@ -112,10 +125,11 @@ export function startApp(): void {
   bindKeyboard({
     view: scene,
     onEscape: info.closeAll,
-    // スライダーと部品一覧は矢印キーを使うため，視点の操作へ回さない．
+    // スライダー・部品一覧・タブは矢印キーを使うため，視点の操作へ回さない．
     usesKeysItself: (target) =>
       target instanceof HTMLInputElement ||
-      (target instanceof Node && partsPanel.contains(target)),
+      (target instanceof Node &&
+        (partsPanel.contains(target) || tabList.contains(target))),
   });
 
   requireElement("reset-view", HTMLButtonElement).addEventListener(
@@ -124,11 +138,66 @@ export function startApp(): void {
   );
   startExplodeController({
     slider: requireElement("explode", HTMLInputElement),
-    output: requireElement("explode-output", HTMLOutputElement),
+    output: requireElement("explode-output", HTMLElement),
     toggleButton: requireElement("toggle-explode", HTMLButtonElement),
     isMotionReduced: () => reducedMotion.matches,
     onChange: scene.setFactor,
   });
+
+  const mechanism = startMechanismController({
+    elements: {
+      stepNumber: requireElement("step-number", HTMLElement),
+      stepTitle: requireElement("step-title", HTMLElement),
+      stepDescription: requireElement("step-description", HTMLElement),
+      stepPosition: requireElement("step-position", HTMLElement),
+      previousButton: requireElement("step-prev", HTMLButtonElement),
+      nextButton: requireElement("step-next", HTMLButtonElement),
+      angleSlider: requireElement("rotor-angle", HTMLInputElement),
+      angleOutput: requireElement("rotor-angle-output", HTMLElement),
+      playButton: requireElement("rotor-play", HTMLButtonElement),
+      reverseButton: requireElement("reverse-polarity", HTMLButtonElement),
+    },
+    isMotionReduced: () => reducedMotion.matches,
+    onChange: scene.setMechanism,
+  });
+
+  const modes: readonly ViewMode[] = ["parts", "mechanism"];
+  const tabs = [
+    requireElement("tab-parts", HTMLElement),
+    requireElement("tab-mechanism", HTMLElement),
+  ];
+  const partsControls = requireElement("controls-parts", HTMLElement);
+  const mechanismControls = requireElement("controls-mechanism", HTMLElement);
+  const stepInfo = requireElement("step-info", HTMLElement);
+
+  /** 表示の種類を切り替え，それぞれに専用の操作と説明だけを見せる． */
+  function showMode(index: number): void {
+    mode = modes[index] ?? "parts";
+    const isMechanism = mode === "mechanism";
+    // 部品の解説は展開図の表示に属するため，切り替えるときに閉じる．
+    info.closeAll();
+    partsPanel.open = false;
+    partsPanel.hidden = isMechanism;
+    partsControls.hidden = isMechanism;
+    mechanismControls.hidden = !isMechanism;
+    stepInfo.hidden = !isMechanism;
+    stage.setAttribute("aria-labelledby", tabs[index]?.id ?? "");
+    stage.dataset.mode = mode;
+    // 3D の表示の名前と操作の案内を，表示の種類に合わせる．
+    canvas.setAttribute(
+      "aria-label",
+      isMechanism
+        ? "回るしくみを示す小型 DC モーターの 3D 表示"
+        : "小型 DC モーターの 3D 展開図",
+    );
+    canvas.setAttribute(
+      "aria-describedby",
+      isMechanism ? "scene-help-mechanism" : "scene-help",
+    );
+    scene.setMode(mode);
+    mechanism.setActive(isMechanism);
+  }
+  bindTabs(tabs, showMode);
 
   new ResizeObserver(scene.resize).observe(stage);
   portrait.addEventListener("change", () => {

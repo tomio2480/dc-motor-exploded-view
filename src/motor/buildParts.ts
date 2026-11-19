@@ -10,11 +10,14 @@ import {
   MeshStandardMaterial,
   type Object3D,
   Path,
+  QuadraticBezierCurve3,
   Shape,
+  TubeGeometry,
   Vector2,
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { poleAngle, segmentAngle } from "./commutation";
 import {
   BEARING,
   BRUSH,
@@ -50,7 +53,7 @@ const PROFILE_TO_MODEL = new Matrix4().set(
   ...[0, 0, 0, 1],
 );
 
-function toVectors(points: readonly Point2[]): Vector2[] {
+export function toVectors(points: readonly Point2[]): Vector2[] {
   return points.map(([u, v]) => new Vector2(u, v));
 }
 
@@ -79,7 +82,7 @@ function rectanglePath(
 }
 
 /** y-z 平面の断面を，x 軸に沿って rearX から frontX まで押し出す． */
-function extrudeAlongX(
+export function extrudeAlongX(
   shape: Shape,
   rearX: number,
   frontX: number,
@@ -308,6 +311,56 @@ function coilLayerShape(): Shape {
   return shape;
 }
 
+/** 軸方向の位置・軸からの距離・軸まわりの角度で表した点を，モデルの座標へ直す． */
+export function cylindrical(x: number, radius: number, angle: number): Vector3 {
+  return new Vector3(x, radius * Math.cos(angle), radius * Math.sin(angle));
+}
+
+/** 引き出し線をつなぐ突起の，軸方向の中心． */
+const TAB_CENTER_X = COMMUTATOR.frontX - COMMUTATOR.tabLength / 2;
+/** 巻線が鉄心の後ろへはみ出した端の，軸方向の位置． */
+const COIL_REAR_X = CORE.rearX - WINDING.thickness;
+/** 突起の中心から，両隣の銅片の中心までの角度． */
+const SEGMENT_HALF_STEP = FULL_TURN / (2 * COMMUTATOR.segmentCount);
+/** 引き出し線の断面を多角形で近似するときの辺の数． */
+const LEAD_RADIAL_SEGMENTS = 6;
+/** 引き出し線の付け根を巻線の中へ埋める深さ． */
+const LEAD_EMBED_DEPTH = 0.3;
+/** 引き出し線の曲がりの頂点を，巻線の端から後ろへずらす距離． */
+const LEAD_BEND_OFFSET = 0.9;
+
+/**
+ * 巻線の端から整流子の突起までの引き出し線を作る．
+ * side が +1 なら反時計回りの隣，-1 なら時計回りの隣の銅片へつなぐ．
+ */
+function createLead(pole: number, side: 1 | -1): BufferGeometry {
+  const coilRadius = (WINDING.innerRadius + WINDING.outerRadius) / 2;
+  const startRadius = Math.hypot(coilRadius, WINDING.leadOffset);
+  const startAngle =
+    poleAngle(pole) + side * Math.atan2(WINDING.leadOffset, coilRadius);
+  // 銅片の角度は 0 から 1 回転の間へそろえた値で返るため，使わない．
+  // 始点から連続した角度で終点を表し，曲がりの頂点が反対側へ回らないようにする．
+  const endAngle = poleAngle(pole) + side * SEGMENT_HALF_STEP;
+
+  const path = new QuadraticBezierCurve3(
+    cylindrical(COIL_REAR_X + LEAD_EMBED_DEPTH, startRadius, startAngle),
+    cylindrical(
+      COIL_REAR_X - LEAD_BEND_OFFSET,
+      startRadius,
+      (startAngle + endAngle) / 2,
+    ),
+    cylindrical(TAB_CENTER_X, COMMUTATOR.tabOuterRadius, endAngle),
+  );
+  // 押し出しで作る層と同じ形式へそろえ，1 つのメッシュへまとめられるようにする．
+  return new TubeGeometry(
+    path,
+    ARC_SEGMENTS / 2,
+    WINDING.leadRadius,
+    LEAD_RADIAL_SEGMENTS,
+    false,
+  ).toNonIndexed();
+}
+
 function buildWindings(): Object3D[] {
   const layerDepth =
     (WINDING.outerRadius - WINDING.innerRadius) / WINDING.layerCount;
@@ -325,66 +378,91 @@ function buildWindings(): Object3D[] {
   const centerX = (CORE.frontX + CORE.rearX) / 2;
   const axial = new Vector3(1, 0, 0);
 
-  const layers: BufferGeometry[] = [];
+  // 極ごとに流れる電流が異なるため，極ごとに別のメッシュと材質を持たせる．
+  const meshes: Mesh[] = [];
   for (let pole = 0; pole < CORE.poleCount; pole += 1) {
-    const angle = CORE.startAngle + (pole * FULL_TURN) / CORE.poleCount;
+    const angle = poleAngle(pole);
     const radial = new Vector3(0, Math.cos(angle), Math.sin(angle));
     const tangential = new Vector3(0, -Math.sin(angle), Math.cos(angle));
     // 層の断面の (幅，軸方向，重ねる方向) を，突起の (接線，x 軸，半径) へ向ける．
     const placement = new Matrix4().makeBasis(tangential, axial, radial);
 
+    const geometries = [createLead(pole, 1), createLead(pole, -1)];
     for (let layer = 0; layer < WINDING.layerCount; layer += 1) {
       const radius = WINDING.innerRadius + bevel + layer * layerDepth;
       placement.setPosition(
         radial.clone().multiplyScalar(radius).setX(centerX),
       );
-      layers.push(layerGeometry.clone().applyMatrix4(placement));
+      geometries.push(layerGeometry.clone().applyMatrix4(placement));
     }
+    const mesh = createMergedMesh(
+      "windings",
+      geometries,
+      metal(0xc56a33, 0.42),
+    );
+    mesh.userData.pole = pole;
+    meshes.push(mesh);
   }
-  return [
-    createPiece("windings", [
-      createMergedMesh("windings", layers, metal(0xc56a33, 0.42)),
-    ]),
-  ];
+  return [createPiece("windings", meshes)];
+}
+
+/** 引き出し線をつなぐ突起を，銅片の前端に作る． */
+function createTab(segment: number): BufferGeometry {
+  const angle = segmentAngle(segment);
+  // 銅片との間にすき間が見えないよう，根元を銅片の中へ少し埋める．
+  const innerRadius = COMMUTATOR.hubRadius;
+  const height = COMMUTATOR.tabOuterRadius - innerRadius;
+  const radial = new Vector3(0, Math.cos(angle), Math.sin(angle));
+  const tangential = new Vector3(0, -Math.sin(angle), Math.cos(angle));
+  // 直方体の (幅，高さ，奥行き) を，突起の (x 軸，半径，接線) へ向ける．
+  const placement = new Matrix4()
+    .makeBasis(new Vector3(1, 0, 0), radial, tangential)
+    .setPosition(cylindrical(TAB_CENTER_X, innerRadius + height / 2, angle));
+  return new BoxGeometry(COMMUTATOR.tabLength, height, COMMUTATOR.tabWidth)
+    .toNonIndexed()
+    .applyMatrix4(placement);
 }
 
 function buildCommutator(): Object3D[] {
   const insulator = circleShape(COMMUTATOR.hubRadius);
   insulator.holes.push(circlePath(SHAFT.radius));
-  const insulatorMesh = createMesh(
-    "commutator",
-    extrudeAlongX(
-      insulator,
-      COMMUTATOR.rearX - COMMUTATOR.hubOverhang,
-      COMMUTATOR.frontX + COMMUTATOR.hubOverhang,
+  const meshes = [
+    createMesh(
+      "commutator",
+      extrudeAlongX(
+        insulator,
+        COMMUTATOR.rearX - COMMUTATOR.hubOverhang,
+        COMMUTATOR.frontX + COMMUTATOR.hubOverhang,
+      ),
+      nonMetal(0x4d3d34, 0.8),
     ),
-    nonMetal(0x4d3d34, 0.8),
-  );
+  ];
 
-  const segments: BufferGeometry[] = [];
-  const segmentStep = FULL_TURN / COMMUTATOR.segmentCount;
-  // 銅片の切れ目を突起の向きへ合わせ，上下のブラシが別の銅片へ触れるようにする．
-  const firstCenter = CORE.startAngle + segmentStep / 2;
-  for (let index = 0; index < COMMUTATOR.segmentCount; index += 1) {
-    const segment = new Shape(
+  // 銅片ごとに電位が異なるため，銅片ごとに別のメッシュと材質を持たせる．
+  for (let segment = 0; segment < COMMUTATOR.segmentCount; segment += 1) {
+    const sector = new Shape(
       toVectors(
         ringSectorProfile({
           innerRadius: COMMUTATOR.hubRadius,
           outerRadius: COMMUTATOR.outerRadius,
-          centerAngle: firstCenter + index * segmentStep,
+          centerAngle: segmentAngle(segment),
           halfSpan: COMMUTATOR.segmentHalfSpan,
           segments: ARC_SEGMENTS / 2,
         }),
       ),
     );
-    segments.push(extrudeAlongX(segment, COMMUTATOR.rearX, COMMUTATOR.frontX));
+    const mesh = createMergedMesh(
+      "commutator",
+      [
+        extrudeAlongX(sector, COMMUTATOR.rearX, COMMUTATOR.frontX),
+        createTab(segment),
+      ],
+      metal(0xd98f58, 0.3),
+    );
+    mesh.userData.segment = segment;
+    meshes.push(mesh);
   }
-  return [
-    createPiece("commutator", [
-      insulatorMesh,
-      createMergedMesh("commutator", segments, metal(0xd98f58, 0.3)),
-    ]),
-  ];
+  return [createPiece("commutator", meshes)];
 }
 
 /** 上側（+1）と下側（-1）．2 個の部品は軸について点対称に置く． */
@@ -393,7 +471,7 @@ const SIDES = [1, -1] as const;
 /** ブラシが整流子へ触れる面の y 座標の絶対値． */
 const BRUSH_CONTACT_Y = COMMUTATOR.outerRadius;
 /** 端子の板の中心の y 座標の絶対値．板の外側の縁をブラシの外面へそろえる． */
-const TERMINAL_CENTER_Y =
+export const TERMINAL_CENTER_Y =
   BRUSH_CONTACT_Y + BRUSH.thickness - TERMINAL.widthY / 2;
 
 function buildBrushes(): Object3D[] {

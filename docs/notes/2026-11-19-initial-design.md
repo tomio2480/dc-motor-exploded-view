@@ -49,7 +49,7 @@
 ### 公開
 
 - `main` への push で GitHub Actions からビルドし，Pages へ公開する．
-- 出力のパスは相対（`base: "./"`）とし，リポジトリ名の変更に影響されないようにする．
+- 出力のパスは相対（`base: "./"`）とし，リポジトリ名を変えても動くようにする．
 - OGP の画像と URL だけは絶対 URL が必要なため，`index.html` に直接書く．
 
 ### 複雑度の管理
@@ -73,7 +73,12 @@
 
 ## 🚫 代替案と棄却理由
 
+<!-- 図表のキャプションは体言止めとするため，この行に限り句点の規則を外す． -->
+<!-- textlint-disable ja-technical-writing/ja-no-mixed-period -->
+
 表 1. 検討した代替案と棄却理由
+
+<!-- textlint-enable ja-technical-writing/ja-no-mixed-period -->
 
 | 代替案 | 棄却理由 |
 |---|---|

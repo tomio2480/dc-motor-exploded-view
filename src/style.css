@@ -131,6 +131,36 @@ input {
   color: var(--muted);
 }
 
+/* ---- 表示の切り替え ---- */
+
+.tabs {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  margin-left: auto;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 999px;
+}
+
+.tabs [role="tab"] {
+  min-height: 34px;
+  padding: 0 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 999px;
+}
+
+/* 選択中のタブは，文字の色だけでなく地の色でも区別できるようにする． */
+.tabs [role="tab"][aria-selected="true"] {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
 /* ---- 部品一覧 ---- */
 
 .parts-panel {
@@ -273,6 +303,11 @@ input {
   pointer-events: none;
 }
 
+/* 部品にふれる操作の案内は，展開図の表示だけに当てはまる． */
+.stage[data-mode="mechanism"] .stage__hint {
+  display: none;
+}
+
 .stage__error[hidden] {
   display: none;
 }
@@ -301,7 +336,8 @@ body[data-state="error"] .stage__error {
   text-align: left;
 }
 
-body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
+body[data-state="error"]
+  :is(canvas, .stage__hint, .parts-panel, .controls, .tabs) {
   display: none;
 }
 
@@ -318,6 +354,49 @@ body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
 .fallback-parts__role {
   font-weight: 700;
   color: var(--accent);
+}
+
+/* ---- 回るしくみの記号 ---- */
+
+.markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.marker {
+  position: absolute;
+  top: -13px;
+  left: -13px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffffff;
+  border: 1.5px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+  will-change: transform;
+}
+
+.marker[hidden] {
+  display: none;
+}
+
+.marker[data-tone="north"] {
+  background: #b3261e;
+}
+
+.marker[data-tone="south"] {
+  background: #1f4fa3;
+}
+
+.marker[data-tone="positive"],
+.marker[data-tone="negative"] {
+  background: #1b222c;
 }
 
 /* ---- 番号ラベル ---- */
@@ -463,6 +542,24 @@ body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
   border-top: 1px solid var(--border);
 }
 
+.controls[hidden] {
+  display: none;
+}
+
+.controls__steps {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.controls__position {
+  min-width: 3.2em;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: center;
+}
+
 .controls__slider {
   display: grid;
   flex: 1 1 260px;
@@ -473,7 +570,7 @@ body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
   font-size: 0.9rem;
 }
 
-.controls__slider output {
+.controls__slider span {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
   text-align: right;
@@ -513,9 +610,45 @@ body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
   filter: brightness(1.08);
 }
 
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.button--toggle[aria-pressed="true"] {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 @media (max-width: 640px) {
+  .masthead {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .masthead__title {
+    flex: 1 1 0;
+  }
+
   .masthead__title p {
     display: none;
+  }
+
+  /* タブは見出しの下の段へ移し，幅いっぱいに並べる． */
+  .tabs {
+    flex: 1 1 100%;
+    order: 1;
+    margin-left: 0;
+  }
+
+  .tabs [role="tab"] {
+    flex: 1 1 0;
+  }
+
+  .controls__steps {
+    flex: 1 1 100%;
+    justify-content: space-between;
   }
 
   /* 狭い画面では解説を 3D の下へ並べ，選んだ部品を隠さないようにする． */

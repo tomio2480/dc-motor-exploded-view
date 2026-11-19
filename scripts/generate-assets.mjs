@@ -16,7 +16,7 @@ const ICONS = [
 const OG_SIZE = { width: 1200, height: 630 };
 // OGP 画像では操作用の要素を隠し，題名を大きく見せる．
 const OG_STYLE = `
-  .controls, .parts-panel, .stage__hint { display: none; }
+  .controls, .parts-panel, .stage__hint, .tabs { display: none; }
   .masthead { padding: 28px 40px 20px; border-bottom: 0; }
   .masthead h1 { font-size: 2.6rem; }
   .masthead__title p { font-size: 1.3rem; }
