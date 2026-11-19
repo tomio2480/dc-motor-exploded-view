@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
 const PART_COUNT = 10;
+const ANIMATION_TIMEOUT_MS = 20_000;
 
 async function openSite(page: Page): Promise<void> {
   // アニメーションを省き，表示の完了を待たずに検証できるようにする．
@@ -126,4 +127,16 @@ test("マウスを部品へ重ねると解説を表示する", async ({ page }, 
   await expect(page.locator("#part-info")).toBeVisible();
   await page.mouse.move(box.x + 4, box.y + 4);
   await expect(page.locator("#part-info")).toBeHidden();
+});
+
+test("読み込み後にアニメーションで展開し，ボタンで組み立てへ戻せる", async ({
+  page,
+}) => {
+  await page.goto("./");
+  const slider = page.getByLabel("展開の度合い");
+  // GPU のない環境では 3D の初期化と描画に時間がかかるため，待ち時間を延ばす．
+  await expect(slider).toHaveValue("100", { timeout: ANIMATION_TIMEOUT_MS });
+  await page.getByRole("button", { name: "組み立てる" }).click();
+  await expect(slider).toHaveValue("0", { timeout: ANIMATION_TIMEOUT_MS });
+  await expect(page.getByRole("button", { name: "展開する" })).toBeVisible();
 });
