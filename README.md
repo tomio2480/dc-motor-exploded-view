@@ -28,14 +28,24 @@ GitHub Pages で公開している．
 
 ![モーターを 10 種類の部品に分け，軸方向へ並べた 3D の展開図．各部品に番号のラベルが付いている．](public/og.png)
 
+<!-- 図表のキャプションは体言止めとするため，この行に限り句点の規則を外す． -->
+<!-- textlint-disable ja-technical-writing/ja-no-mixed-period -->
+
 図 1. 展開した状態の表示
+
+<!-- textlint-enable ja-technical-writing/ja-no-mixed-period -->
 
 ## 🧩 表示する部品
 
 130 型相当の 3 極ブラシ付き DC モーターを，表 1 の 10 種類の部品に分けて表示する．
 番号は図中のラベルと対応する．
 
+<!-- 図表のキャプションは体言止めとするため，この行に限り句点の規則を外す． -->
+<!-- textlint-disable ja-technical-writing/ja-no-mixed-period -->
+
 表 1. 表示する部品と役割
+
+<!-- textlint-enable ja-technical-writing/ja-no-mixed-period -->
 
 | 番号 | 部品 | 役割 |
 |---|---|---|
@@ -56,7 +66,12 @@ GitHub Pages で公開している．
 「回るしくみ」では外側の部品を隠し，整流子の側から軸に沿って見た表示になる．
 電源をつないでから回り続けるまでを，表 2 の 6 段階で説明する．
 
+<!-- 図表のキャプションは体言止めとするため，この行に限り句点の規則を外す． -->
+<!-- textlint-disable ja-technical-writing/ja-no-mixed-period -->
+
 表 2. 回るしくみの段階と 3D へ重ねる表示
+
+<!-- textlint-enable ja-technical-writing/ja-no-mixed-period -->
 
 | 段階 | 題 | 3D へ重ねる表示 |
 |---|---|---|
@@ -73,7 +88,12 @@ GitHub Pages で公開している．
 
 ## 🖱 操作方法
 
+<!-- 図表のキャプションは体言止めとするため，この行に限り句点の規則を外す． -->
+<!-- textlint-disable ja-technical-writing/ja-no-mixed-period -->
+
 表 3. 操作と動作
+
+<!-- textlint-enable ja-technical-writing/ja-no-mixed-period -->
 
 | 操作 | 動作 |
 |---|---|
@@ -101,7 +121,7 @@ GitHub Pages で公開している．
 
 - Node.js 22 系（22.12 以上）または 24 系
 - npm
-- cccc v1.9.2（複雑度の検査を実行する場合）
+- cccc v1.9.2（複雑度を検査する場合）
 
 ### セットアップ
 
@@ -113,7 +133,12 @@ npm run dev
 
 ### コマンド
 
+<!-- 図表のキャプションは体言止めとするため，この行に限り句点の規則を外す． -->
+<!-- textlint-disable ja-technical-writing/ja-no-mixed-period -->
+
 表 4. 開発で使うコマンド
+
+<!-- textlint-enable ja-technical-writing/ja-no-mixed-period -->
 
 | コマンド | 内容 |
 |---|---|
@@ -149,9 +174,14 @@ E2E_FIREFOX_HEADED=1 xvfb-run --auto-servernum npm run test:e2e -- --project="fi
 ### 複雑度の検査
 
 保守しやすさを保つため，関数ごとの複雑度へ上限を設けている．
-計測には [cccc](https://github.com/moznion/cccc) を使い，CI でも同じ検査を実行する．
+計測には [cccc](https://github.com/moznion/cccc) を使い，CI でも同じ内容を検査する．
+
+<!-- 図表のキャプションは体言止めとするため，この行に限り句点の規則を外す． -->
+<!-- textlint-disable ja-technical-writing/ja-no-mixed-period -->
 
 表 5. 複雑度の上限
+
+<!-- textlint-enable ja-technical-writing/ja-no-mixed-period -->
 
 | 指標 | 上限 | 判定 |
 |---|---|---|
@@ -176,7 +206,12 @@ cccc は入れ子の関数を別の単位として数えるため，外側の関
 
 ## 📁 ディレクトリ構成
 
+<!-- 図表のキャプションは体言止めとするため，この行に限り句点の規則を外す． -->
+<!-- textlint-disable ja-technical-writing/ja-no-mixed-period -->
+
 表 6. 主なディレクトリと内容
+
+<!-- textlint-enable ja-technical-writing/ja-no-mixed-period -->
 
 | パス | 内容 |
 |---|---|
@@ -205,7 +240,12 @@ WebKit での検証は実機の Safari の代わりにはならないため，iO
 スマートフォンでの閲覧を想定し，表 7 の方針で負荷を抑えている．
 数値は 2026-11-19 に Pixel 7 相当の画面設定で計測した．
 
+<!-- 図表のキャプションは体言止めとするため，この行に限り句点の規則を外す． -->
+<!-- textlint-disable ja-technical-writing/ja-no-mixed-period -->
+
 表 7. 負荷を抑える方針と計測値
+
+<!-- textlint-enable ja-technical-writing/ja-no-mixed-period -->
 
 | 項目 | 方針 | 計測値 |
 |---|---|---|
@@ -235,7 +275,7 @@ GPU での描画時間は，実機でなければ計測できない．
 永久磁石の色は極を区別するための表現であり，実物の色とは異なる．
 ブラシは，金属の板が整流子へ直接触れる形（金属ブラシ）で表している．
 高出力の型では，板の先にカーボンの小片を付けた形（カーボンブラシ）が使われる．
-回るしくみの電流と力は，説明のために単純化した計算による．
+回るしくみの電流と力は，説明用の単純化した計算で求めている．
 
 ## 📄 ライセンス
 
