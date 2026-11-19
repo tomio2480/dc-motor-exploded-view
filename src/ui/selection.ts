@@ -6,6 +6,7 @@ export interface SelectionState {
   readonly selected: PartId | null;
 }
 
+/** 選択もホバーもない状態．解説を閉じるときもこの状態へ戻す． */
 export const INITIAL_SELECTION: SelectionState = {
   hovered: null,
   selected: null,
@@ -18,12 +19,21 @@ export function hover(
   return { ...state, hovered: id };
 }
 
-/** 部品を選択する．選択中の部品をもう一度選ぶと解除する． */
+/**
+ * 部品を選択する．選択中の部品をもう一度選ぶと解除する．
+ * 解除したときは，同じ部品へのホバーによる表示も閉じる．
+ */
 export function toggleSelected(
   state: SelectionState,
   id: PartId,
 ): SelectionState {
-  return { ...state, selected: state.selected === id ? null : id };
+  if (state.selected !== id) {
+    return { ...state, selected: id };
+  }
+  return {
+    hovered: state.hovered === id ? null : state.hovered,
+    selected: null,
+  };
 }
 
 export function clearSelected(state: SelectionState): SelectionState {

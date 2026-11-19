@@ -178,8 +178,8 @@ function buildBearing(): Object3D[] {
 
 function buildMagnets(): Object3D[] {
   const poles = [
-    { centerAngle: 0, color: 0x9a3d38 },
-    { centerAngle: Math.PI, color: 0x34549a },
+    { centerAngle: 0, color: 0x8f2f2a },
+    { centerAngle: Math.PI, color: 0x2a488f },
   ];
   return poles.map(({ centerAngle, color }) => {
     const sector = new Shape(
@@ -431,7 +431,7 @@ function buildTerminals(): Object3D[] {
 }
 
 function buildEndBell(): Object3D[] {
-  const material = nonMetal(0xece8dc, 0.6);
+  const material = nonMetal(0xd8d2c2, 0.6);
 
   const cover = new Shape(
     toVectors(flattedCircleProfile(CASE.radius, CASE.flatHalf, ARC_SEGMENTS)),

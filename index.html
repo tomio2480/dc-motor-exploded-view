@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>小型 DC モーターの 3D 展開図｜部品としくみ</title>
+    <meta
+      name="description"
+      content="模型用の小型 DC モーターを 3D の展開図で表示します．部品にふれると名前と役割の解説を確認でき，回る仕組みを部品ごとに学べます．"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="theme-color"
+      content="#f3f1ec"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#15181d"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link
+      rel="canonical"
+      href="https://tomio2480.github.io/dc-motor-exploded-view/"
+    />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta property="og:title" content="小型 DC モーターの 3D 展開図" />
+    <meta
+      property="og:description"
+      content="模型用の小型 DC モーターを 3D の展開図で表示します．部品にふれると名前と役割の解説を確認できます．"
+    />
+    <meta
+      property="og:url"
+      content="https://tomio2480.github.io/dc-motor-exploded-view/"
+    />
+    <meta
+      property="og:image"
+      content="https://tomio2480.github.io/dc-motor-exploded-view/og.png"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="小型 DC モーターを部品ごとに分けて並べた 3D の展開図"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="小型 DC モーターの 3D 展開図" />
+    <meta
+      name="twitter:image"
+      content="https://tomio2480.github.io/dc-motor-exploded-view/og.png"
+    />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__title">
+        <h1>小型 DC モーターの 3D 展開図</h1>
+        <p>130 型相当のブラシ付きモーター</p>
+      </div>
+      <details class="parts-panel" id="parts-panel">
+        <summary>部品一覧</summary>
+        <ol class="parts-list" id="parts-list"></ol>
+      </details>
+    </header>
+
+    <main class="stage" id="stage">
+      <canvas
+        id="scene"
+        role="img"
+        aria-label="小型 DC モーターの 3D 展開図"
+        aria-describedby="scene-help"
+      ></canvas>
+      <p class="visually-hidden" id="scene-help">
+        矢印キーで視点を回転し，プラスとマイナスのキーで拡大と縮小ができます．各部品の解説は，番号のボタンまたは部品一覧から表示できます．
+      </p>
+      <ol class="labels" id="labels" aria-label="部品の番号"></ol>
+      <p class="stage__hint" aria-hidden="true">
+        ドラッグや矢印キーで回転・ホイールやピンチで拡大・部品にふれると解説
+      </p>
+      <p class="stage__error" id="stage-error" role="alert" hidden>
+        この環境では 3D を表示できませんでした．WebGL に対応したブラウザーでご覧ください．
+      </p>
+      <noscript>
+        <p class="stage__error">
+          3D の展開図を表示するには JavaScript を有効にしてください．
+        </p>
+      </noscript>
+      <section
+        class="part-info"
+        id="part-info"
+        aria-labelledby="part-info-title"
+        hidden
+      >
+        <h2 class="visually-hidden" id="part-info-title">部品の解説</h2>
+        <header class="part-info__header">
+          <span class="part-info__number" id="part-info-number"></span>
+          <div>
+            <p class="part-info__name" id="part-info-name"></p>
+            <p class="part-info__kana" id="part-info-kana"></p>
+          </div>
+          <button
+            type="button"
+            class="part-info__close"
+            id="part-info-close"
+            aria-label="解説を閉じる"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3 3l10 10M13 3L3 13" />
+            </svg>
+          </button>
+        </header>
+        <p class="part-info__role" id="part-info-role"></p>
+        <p class="part-info__description" id="part-info-description"></p>
+      </section>
+    </main>
+
+    <form class="controls" aria-label="表示の操作">
+      <button type="button" class="button button--primary" id="toggle-explode">
+        組み立てる
+      </button>
+      <div class="controls__slider">
+        <label for="explode">展開の度合い</label>
+        <input
+          type="range"
+          id="explode"
+          min="0"
+          max="100"
+          step="1"
+          value="100"
+        />
+        <output id="explode-output" for="explode">100%</output>
+      </div>
+      <button type="button" class="button" id="reset-view">視点を戻す</button>
+    </form>
+
+    <p class="visually-hidden" id="announcer" aria-live="polite"></p>
+  </body>
+</html>

@@ -40,6 +40,12 @@ describe("部品の選択状態", () => {
     expect(twice.selected).toBeNull();
   });
 
+  test("選択を外すと，その部品へのホバーによる表示も閉じる", () => {
+    const hovered = hover(INITIAL_SELECTION, "shaft");
+    const closed = toggleSelected(toggleSelected(hovered, "shaft"), "shaft");
+    expect(activePart(closed)).toBeNull();
+  });
+
   test("別の部品を選ぶと選択が移る", () => {
     const first = toggleSelected(INITIAL_SELECTION, "shaft");
     const second = toggleSelected(first, "core");
