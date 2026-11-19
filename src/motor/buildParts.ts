@@ -17,6 +17,7 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { poleAngle, segmentAngle } from "./commutation";
 import {
   BEARING,
   BRUSH,
@@ -313,20 +314,6 @@ function coilLayerShape(): Shape {
 /** 軸方向の位置・軸からの距離・軸まわりの角度で表した点を，モデルの座標へ直す． */
 function cylindrical(x: number, radius: number, angle: number): Vector3 {
   return new Vector3(x, radius * Math.cos(angle), radius * Math.sin(angle));
-}
-
-/** 突起（極）が向く角度． */
-function poleAngle(pole: number): number {
-  return CORE.startAngle + (pole * FULL_TURN) / CORE.poleCount;
-}
-
-/**
- * 銅片の中心が向く角度．
- * 銅片は突起と突起の間にあり，銅片 n は突起 n と突起 n + 1 の間に位置する．
- * 切れ目が突起の向きと合うため，上下のブラシは別の銅片へ触れる．
- */
-function segmentAngle(segment: number): number {
-  return poleAngle(segment) + FULL_TURN / (2 * COMMUTATOR.segmentCount);
 }
 
 /** 引き出し線をつなぐ突起の，軸方向の中心． */
