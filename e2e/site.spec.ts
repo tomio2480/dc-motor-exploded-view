@@ -97,6 +97,46 @@ test.describe("3D 展開図", () => {
     );
   });
 
+  test("キーボードだけで部品の解説を表示できる", async ({ page }) => {
+    const label = page.getByRole("button", { name: "1 軸受" });
+    // 先頭の操作部品から順にたどり，番号のボタンへ到達できることを確かめる．
+    for (let presses = 0; presses < 5; presses += 1) {
+      await page.keyboard.press("Tab");
+      if (
+        await label.evaluate((element) => element === document.activeElement)
+      ) {
+        break;
+      }
+    }
+    await expect(label).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#part-info")).toContainText(
+      "シャフトを支えて滑らかに回す",
+    );
+    await expect(page.locator("#announcer")).toContainText("軸受");
+  });
+
+  test("矢印キーで視点が回り，番号の位置が変わる", async ({ page }) => {
+    const label = page.getByRole("button", { name: "1 軸受" });
+    const before = await label.boundingBox();
+    await page.keyboard.press("ArrowRight");
+    await expect
+      .poll(async () => (await label.boundingBox())?.x)
+      .not.toBe(before?.x);
+  });
+
+  test("スライダーの操作中は矢印キーで視点が回らない", async ({ page }) => {
+    const label = page.getByRole("button", { name: "10 エンドベル" });
+    const slider = page.getByLabel("展開の度合い");
+    await slider.focus();
+    const before = await label.boundingBox();
+    await page.keyboard.press("ArrowLeft");
+    await expect(slider).toHaveValue("99");
+    await page.keyboard.press("ArrowRight");
+    await expect(slider).toHaveValue("100");
+    expect((await label.boundingBox())?.x).toBeCloseTo(before?.x ?? 0, 0);
+  });
+
   test("横スクロールが発生しない", async ({ page }) => {
     const overflow = await page.evaluate(
       () =>
