@@ -494,6 +494,8 @@ export function createMotorScene(
       needsRender = true;
     },
     zoomBy(scale) {
+      // 自動の視点移動が距離を上書きしないよう，利用者の操作を優先する．
+      goal = null;
       const offset = camera.position.clone().sub(controls.target);
       const distance = Math.min(
         controls.maxDistance,
