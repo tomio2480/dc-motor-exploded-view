@@ -75,9 +75,17 @@ jobs:
         run: npm run complexity
 
   e2e:
-    name: E2E・アクセシビリティ検査
+    name: E2E・アクセシビリティ検査（${{ matrix.browser }}）
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # webkit は Safari と同じ描画エンジンである．
+        browser:
+          - chromium
+          - firefox
+          - webkit
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -93,16 +101,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install browser
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: npx playwright install --with-deps "${BROWSER}"
 
       - name: Run E2E tests with axe-core
-        run: npm run test:e2e -- --trace off
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: npm run test:e2e -- --trace off --project="${BROWSER}-*"
 
       - name: Upload Playwright report
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.browser }}
           path: playwright-report/
           retention-days: 7

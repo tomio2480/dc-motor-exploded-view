@@ -3,7 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 const PREVIEW_PORT = 4173;
 // 既定のブラウザーを使えない環境では，Chromium の実行ファイルを環境変数で指定する．
 const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
-const launchOptions = {
+/** Chromium 系のプロジェクトだけに渡す起動オプション． */
+const chromiumLaunchOptions = {
   // GPU のない CI でも WebGL を描画できるよう，ソフトウェア描画を許可する．
   args: ["--enable-unsafe-swiftshader"],
   ...(chromiumPath === undefined ? {} : { executablePath: chromiumPath }),
@@ -16,16 +17,31 @@ export default defineConfig({
   reporter: process.env.CI === undefined ? "list" : [["list"], ["html"]],
   use: {
     baseURL: `http://localhost:${PREVIEW_PORT}`,
-    launchOptions,
   },
+  // プロジェクト名は「エンジン-画面の種類」とし，CI ではエンジンごとに絞って実行する．
   projects: [
     {
-      name: "desktop",
-      use: { ...devices["Desktop Chrome"] },
+      name: "chromium-desktop",
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: chromiumLaunchOptions,
+      },
     },
     {
-      name: "mobile",
-      use: { ...devices["Pixel 7"] },
+      name: "chromium-mobile",
+      use: { ...devices["Pixel 7"], launchOptions: chromiumLaunchOptions },
+    },
+    {
+      name: "firefox-desktop",
+      use: { ...devices["Desktop Firefox"] },
+    },
+    {
+      name: "webkit-desktop",
+      use: { ...devices["Desktop Safari"] },
+    },
+    {
+      name: "webkit-mobile",
+      use: { ...devices["iPhone 15"] },
     },
   ],
   webServer: {

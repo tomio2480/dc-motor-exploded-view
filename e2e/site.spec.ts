@@ -239,8 +239,9 @@ test.describe("3D 展開図", () => {
 });
 
 test.describe("マウスでの操作", () => {
-  test.beforeEach(async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== "desktop", "マウス操作の検証である");
+  test.skip(({ isMobile }) => isMobile, "マウス操作の検証である");
+
+  test.beforeEach(async ({ page }) => {
     await openSite(page);
   });
 

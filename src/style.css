@@ -367,6 +367,8 @@ body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  /* Safari 17 以前は接頭辞つきの指定だけを解釈する． */
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
@@ -524,6 +526,7 @@ body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
     background: var(--surface-solid);
     box-shadow: none;
     /* 3D の上へ重ならないため，負荷の高いぼかしは使わない． */
+    -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
 
