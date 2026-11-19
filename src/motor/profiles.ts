@@ -87,21 +87,15 @@ export function ringSectorProfile(sector: RingSector): Point2[] {
   ];
 }
 
-/**
- * 電機子鉄心の断面を，反時計回りの点列で返す．
- * 中心のハブから柱が伸び，その先に円弧状の先端が付いた突起を極数ぶん並べる．
- */
-export function armatureProfile(shape: ArmatureShape): Point2[] {
-  const {
-    poleCount,
-    hubRadius,
-    stemHalfWidth,
-    headInnerRadius,
-    headOuterRadius,
-    headHalfSpan,
-    startAngle,
-    segments,
-  } = shape;
+/** 突起の柱が，ハブの円周上と先端の内側の円周上で占める角度の半分． */
+interface StemAngles {
+  readonly atHub: number;
+  readonly atHead: number;
+}
+
+/** 形として成り立たない寸法を拒否し，柱の角度を返す． */
+function resolveStemAngles(shape: ArmatureShape): StemAngles {
+  const { poleCount, hubRadius, stemHalfWidth, headInnerRadius } = shape;
   if (!Number.isInteger(poleCount) || poleCount < 2) {
     throw new RangeError(`極数が 2 以上の整数ではない: ${poleCount}`);
   }
@@ -110,17 +104,39 @@ export function armatureProfile(shape: ArmatureShape): Point2[] {
       `柱の幅の半分は 0 より大きくハブの半径より小さい値にする: ${stemHalfWidth}`,
     );
   }
-  if (!(hubRadius < headInnerRadius) || !(headInnerRadius < headOuterRadius)) {
+  if (
+    !(hubRadius < headInnerRadius) ||
+    !(headInnerRadius < shape.headOuterRadius)
+  ) {
     throw new RangeError("半径はハブ，突起の先端の内側，外側の順に大きくする");
   }
-  const poleStep = (2 * Math.PI) / poleCount;
-  const stemAngleAtHub = Math.asin(stemHalfWidth / hubRadius);
-  const stemAngleAtHead = Math.asin(stemHalfWidth / headInnerRadius);
-  if (!(headHalfSpan > stemAngleAtHead) || !(headHalfSpan < poleStep / 2)) {
+  const atHead = Math.asin(stemHalfWidth / headInnerRadius);
+  const isHeadSpanValid =
+    shape.headHalfSpan > atHead && shape.headHalfSpan < Math.PI / poleCount;
+  if (!isHeadSpanValid) {
     throw new RangeError(
-      `突起の先端の開き角は柱より広く，隣の突起と重ならない値にする: ${headHalfSpan}`,
+      `突起の先端の開き角は柱より広く，隣の突起と重ならない値にする: ${shape.headHalfSpan}`,
     );
   }
+  return { atHub: Math.asin(stemHalfWidth / hubRadius), atHead };
+}
+
+/**
+ * 電機子鉄心の断面を，反時計回りの点列で返す．
+ * 中心のハブから柱が伸び，その先に円弧状の先端が付いた突起を極数ぶん並べる．
+ */
+export function armatureProfile(shape: ArmatureShape): Point2[] {
+  const {
+    poleCount,
+    hubRadius,
+    headInnerRadius,
+    headOuterRadius,
+    headHalfSpan,
+    startAngle,
+    segments,
+  } = shape;
+  const stem = resolveStemAngles(shape);
+  const poleStep = (2 * Math.PI) / poleCount;
 
   const points: Point2[] = [];
   for (let pole = 0; pole < poleCount; pole += 1) {
@@ -128,7 +144,7 @@ export function armatureProfile(shape: ArmatureShape): Point2[] {
     points.push(
       ...arcPoints(
         headInnerRadius,
-        center - stemAngleAtHead,
+        center - stem.atHead,
         center - headHalfSpan,
         segments,
       ),
@@ -141,13 +157,13 @@ export function armatureProfile(shape: ArmatureShape): Point2[] {
       ...arcPoints(
         headInnerRadius,
         center + headHalfSpan,
-        center + stemAngleAtHead,
+        center + stem.atHead,
         segments,
       ),
       ...arcPoints(
         hubRadius,
-        center + stemAngleAtHub,
-        center + poleStep - stemAngleAtHub,
+        center + stem.atHub,
+        center + poleStep - stem.atHub,
         segments,
       ),
     );

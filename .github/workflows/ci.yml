@@ -39,6 +39,41 @@ jobs:
       - name: Build
         run: npm run build
 
+  complexity:
+    name: 複雑度の検査（cccc）
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      # cccc は版を固定し，配布物の SHA-256 を照合してから使う．
+      # 版を上げるときは，scripts/check-complexity.mjs の版と採点の差分も確かめる．
+      - name: Install cccc
+        env:
+          CCCC_VERSION: v1.9.2
+          CCCC_SHA256: eb964d5fa9daa8cb557499722865cd89cbd77764485899ddce4e0a5a2cb667a5
+        run: |
+          archive="cccc-${CCCC_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/moznion/cccc/releases/download/${CCCC_VERSION}/${archive}"
+          echo "${CCCC_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check --strict
+          mkdir -p "${RUNNER_TEMP}/cccc"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/cccc" cccc
+          echo "${RUNNER_TEMP}/cccc" >> "${GITHUB_PATH}"
+
+      # 指標: 認知的複雑度（上限 15）と循環的複雑度（上限 10）．
+      # 閾値と数え方の出典は scripts/check-complexity.mjs に記す．
+      - name: Check complexity
+        run: npm run complexity
+
   e2e:
     name: E2E・アクセシビリティ検査
     runs-on: ubuntu-latest
