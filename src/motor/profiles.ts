@@ -154,13 +154,3 @@ export function armatureProfile(shape: ArmatureShape): Point2[] {
   }
   return points;
 }
-
-/** 多角形の符号付き面積を返す．反時計回りなら正になる． */
-export function signedArea(points: readonly Point2[]): number {
-  let doubled = 0;
-  points.forEach((point, index) => {
-    const next = points[(index + 1) % points.length] as Point2;
-    doubled += point[0] * next[1] - next[0] * point[1];
-  });
-  return doubled / 2;
-}

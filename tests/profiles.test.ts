@@ -5,7 +5,6 @@ import {
   flattedCircleProfile,
   type Point2,
   ringSectorProfile,
-  signedArea,
 } from "../src/motor/profiles";
 
 const EPSILON = 1e-9;
@@ -20,6 +19,16 @@ function containsPoint(points: readonly Point2[], target: Point2): boolean {
       Math.abs(point[0] - target[0]) < 1e-6 &&
       Math.abs(point[1] - target[1]) < 1e-6,
   );
+}
+
+/** 多角形の符号付き面積を返す．反時計回りなら正になる． */
+function signedArea(points: readonly Point2[]): number {
+  let doubled = 0;
+  points.forEach((point, index) => {
+    const next = points[(index + 1) % points.length] as Point2;
+    doubled += point[0] * next[1] - next[0] * point[1];
+  });
+  return doubled / 2;
 }
 
 describe("signedArea", () => {

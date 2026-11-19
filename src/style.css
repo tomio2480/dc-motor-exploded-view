@@ -17,6 +17,7 @@
   --radius: 12px;
   --gutter: 16px;
   --label-size: 32px;
+  --stage-min-height: 220px;
 
   font-family:
     system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI",
@@ -61,11 +62,11 @@ body {
   margin: 0;
 }
 
+/* 画面が極端に小さいときは 3D の領域に最小の高さを保ち，縦にスクロールさせる． */
 body {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(var(--stage-min-height), 1fr) auto;
   height: 100dvh;
-  overflow: hidden;
 }
 
 h1,
@@ -246,7 +247,10 @@ input {
   );
 }
 
+/* canvas の大きさが親の高さの計算へ影響しないよう，領域いっぱいへ重ねる． */
 .stage canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -256,10 +260,6 @@ input {
 
 .stage canvas:active {
   cursor: grabbing;
-}
-
-.stage canvas:focus-visible {
-  outline-offset: -3px;
 }
 
 .stage__hint {
@@ -284,6 +284,40 @@ input {
   place-items: center;
   padding: var(--gutter);
   text-align: center;
+}
+
+/* ---- 3D を表示できないときの代替 ---- */
+
+body[data-state="error"] .stage {
+  padding: var(--gutter);
+  overflow-y: auto;
+}
+
+body[data-state="error"] .stage__error {
+  position: static;
+  display: block;
+  padding: 0 0 var(--gutter);
+  font-weight: 700;
+  text-align: left;
+}
+
+body[data-state="error"] :is(canvas, .stage__hint, .parts-panel, .controls) {
+  display: none;
+}
+
+.fallback-parts:not([hidden]) {
+  display: grid;
+  gap: 14px;
+  max-width: 640px;
+}
+
+.fallback-parts__name {
+  font-weight: 700;
+}
+
+.fallback-parts__role {
+  font-weight: 700;
+  color: var(--accent);
 }
 
 /* ---- 番号ラベル ---- */
@@ -324,7 +358,8 @@ input {
 
 /* ---- 解説 ---- */
 
-.part-info {
+.part-info,
+.part-tooltip {
   z-index: 2;
   width: min(340px, calc(100vw - 2 * var(--gutter)));
   padding: 14px 16px 16px;
@@ -335,15 +370,15 @@ input {
   backdrop-filter: blur(10px);
 }
 
-.part-info[data-mode="floating"] {
-  position: fixed;
-  pointer-events: none;
-}
-
-.part-info[data-mode="docked"] {
+.part-info {
   position: absolute;
   bottom: var(--gutter);
   left: var(--gutter);
+}
+
+.part-tooltip {
+  position: fixed;
+  pointer-events: none;
 }
 
 .part-info__header {
@@ -387,10 +422,6 @@ input {
   background: none;
   border: 0;
   border-radius: 50%;
-}
-
-.part-info[data-mode="floating"] .part-info__close {
-  display: none;
 }
 
 .part-info__close:hover {
@@ -486,7 +517,7 @@ input {
   }
 
   /* 狭い画面では解説を 3D の下へ並べ，選んだ部品を隠さないようにする． */
-  .part-info[data-mode="docked"] {
+  .part-info {
     position: static;
     width: auto;
     margin: 0 var(--gutter) 10px;

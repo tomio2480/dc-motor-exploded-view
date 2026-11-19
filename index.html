@@ -63,7 +63,7 @@
         <p>130 型相当のブラシ付きモーター</p>
       </div>
       <details class="parts-panel" id="parts-panel">
-        <summary>部品一覧</summary>
+        <summary id="parts-summary">部品一覧</summary>
         <ol class="parts-list" id="parts-list"></ol>
       </details>
     </header>
@@ -79,13 +79,14 @@
         <p class="visually-hidden" id="scene-help">
           矢印キーで視点を回転し，プラスとマイナスのキーで拡大と縮小ができます．各部品の解説は，番号のボタンまたは部品一覧から表示できます．
         </p>
-        <ol class="labels" id="labels" aria-label="部品の番号"></ol>
+        <ol class="labels" id="labels" aria-label="部品の番号" hidden></ol>
         <p class="stage__hint" aria-hidden="true">
           ドラッグや矢印キーで回転・ホイールやピンチで拡大・部品にふれると解説
         </p>
         <p class="stage__error" id="stage-error" role="alert" hidden>
           この環境では 3D を表示できませんでした．WebGL に対応したブラウザーでご覧ください．
         </p>
+        <ol class="fallback-parts" id="fallback-parts" hidden></ol>
         <noscript>
           <p class="stage__error">
             3D の展開図を表示するには JavaScript を有効にしてください．
@@ -99,25 +100,6 @@
         hidden
       >
         <h2 class="visually-hidden" id="part-info-title">部品の解説</h2>
-        <header class="part-info__header">
-          <span class="part-info__number" id="part-info-number"></span>
-          <div>
-            <p class="part-info__name" id="part-info-name"></p>
-            <p class="part-info__kana" id="part-info-kana"></p>
-          </div>
-          <button
-            type="button"
-            class="part-info__close"
-            id="part-info-close"
-            aria-label="解説を閉じる"
-          >
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M3 3l10 10M13 3L3 13" />
-            </svg>
-          </button>
-        </header>
-        <p class="part-info__role" id="part-info-role"></p>
-        <p class="part-info__description" id="part-info-description"></p>
       </section>
     </main>
 
@@ -140,6 +122,8 @@
       <button type="button" class="button" id="reset-view">視点を戻す</button>
     </form>
 
+    <!-- 同じ内容を番号のボタンと部品一覧から取得できるため，支援技術には伝えない． -->
+    <div class="part-tooltip" id="part-tooltip" aria-hidden="true" hidden></div>
     <p class="visually-hidden" id="announcer" aria-live="polite"></p>
   </body>
 </html>

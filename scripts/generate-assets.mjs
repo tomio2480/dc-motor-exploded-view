@@ -1,6 +1,7 @@
 // favicon の PNG と OGP 画像を，SVG と実際の画面から生成する．
 // 使い方: npm run generate:assets
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import { build, preview } from "vite";
 
@@ -37,7 +38,7 @@ try {
       `<style>html,body{margin:0}svg{display:block;width:${size}px;height:${size}px}</style>${iconSvg}`,
     );
     await page.screenshot({
-      path: new URL(file, PUBLIC_DIR).pathname,
+      path: fileURLToPath(new URL(file, PUBLIC_DIR)),
       omitBackground: true,
     });
     await page.close();
@@ -56,7 +57,9 @@ try {
     await page.addStyleTag({ content: OG_STYLE });
     // 表示領域の大きさが変わった後の再描画を待つ．
     await page.waitForTimeout(500);
-    await page.screenshot({ path: new URL("og.png", PUBLIC_DIR).pathname });
+    await page.screenshot({
+      path: fileURLToPath(new URL("og.png", PUBLIC_DIR)),
+    });
   } finally {
     await server.close();
   }

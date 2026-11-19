@@ -37,6 +37,8 @@ export interface LabelPosition {
 
 export interface MotorSceneOptions {
   readonly reducedMotion: boolean;
+  /** 縦長の画面かどうか．縦長ではモーターの軸を縦へ向ける． */
+  readonly portrait: boolean;
   /** 引き出し線の色．CSS の色表記で渡す． */
   readonly lineColor: string;
   /** 描画のたびに，番号ラベルの位置と不透明度を受け取る． */
@@ -56,7 +58,10 @@ export interface MotorScene {
   orbitBy(horizontal: number, vertical: number): void;
   /** 注視点までの距離を倍率で変える．1 より小さい値で近づく． */
   zoomBy(scale: number): void;
+  /** 画面の向きに合わせてモデルの向きを切り替え，視点を初期の向きへ戻す． */
+  setPortrait(portrait: boolean): void;
   resetView(): void;
+  /** 描画領域の大きさの変化へ追従する．利用者が変えた拡大率と注視点は保つ． */
   resize(): void;
 }
 
@@ -84,6 +89,12 @@ interface Piece {
   readonly object: Object3D;
   readonly offset: Vec3;
   readonly bounds: Box3;
+}
+
+/** 画角合わせで決めた注視点と距離．利用者による拡大と移動の基準にする． */
+interface FittedView {
+  readonly target: Vector3;
+  readonly distance: number;
 }
 
 interface LabelLineObject {
@@ -196,7 +207,8 @@ export function createMotorScene(
   });
 
   let factor = 1;
-  let isPortrait = false;
+  let isPortrait = options.portrait;
+  let fitted: FittedView | null = null;
   let highlighted: PartId | null = null;
   let needsRender = true;
   const raycaster = new Raycaster();
@@ -234,11 +246,21 @@ export function createMotorScene(
     return points.map((point) => root.localToWorld(point));
   }
 
-  /** 現在の視線の向きを保ったまま，全体が収まる距離へカメラを置く． */
-  function fitView(): void {
+  /**
+   * 現在の視線の向きを保ったまま，全体が収まる距離へカメラを置く．
+   * keepUserView が真なら，利用者が変えた拡大率と注視点のずれを引き継ぐ．
+   */
+  function fitView(keepUserView: boolean): void {
     const points = framePoints();
     const target = new Box3().setFromPoints(points).getCenter(new Vector3());
-    const direction = camera.position.clone().sub(controls.target).normalize();
+    const offset = camera.position.clone().sub(controls.target);
+    const direction = offset.clone().normalize();
+    const previous = keepUserView ? fitted : null;
+    const zoom = previous === null ? 1 : offset.length() / previous.distance;
+    const pan =
+      previous === null
+        ? new Vector3()
+        : controls.target.clone().sub(previous.target);
 
     camera.position.copy(target).add(direction);
     camera.lookAt(target);
@@ -258,24 +280,31 @@ export function createMotorScene(
         (camera.fov * Math.PI) / 180,
         camera.aspect,
       );
+    fitted = { target, distance };
 
-    camera.position.copy(target).addScaledVector(direction, distance);
+    controls.target.copy(target).add(pan);
+    controls.minDistance = distance * ZOOM_IN_LIMIT;
+    controls.maxDistance = distance * ZOOM_OUT_LIMIT;
+    camera.position
+      .copy(controls.target)
+      .addScaledVector(direction, distance * zoom);
     camera.near = distance / 100;
     camera.far = distance * 10;
     camera.updateProjectionMatrix();
-    controls.target.copy(target);
-    controls.minDistance = distance * ZOOM_IN_LIMIT;
-    controls.maxDistance = distance * ZOOM_OUT_LIMIT;
     controls.update();
     needsRender = true;
   }
 
-  function resetView(): void {
+  /** モデルとカメラを，画面の向きに応じた初期の向きへ置く． */
+  function placeDefaultView(): void {
     root.rotation.z = isPortrait ? Math.PI / 2 : 0;
-    const view = isPortrait ? PORTRAIT_VIEW : LANDSCAPE_VIEW;
     controls.target.set(0, 0, 0);
-    camera.position.set(...view);
-    fitView();
+    camera.position.set(...(isPortrait ? PORTRAIT_VIEW : LANDSCAPE_VIEW));
+  }
+
+  function resetView(): void {
+    placeDefaultView();
+    fitView(false);
   }
 
   function resize(): void {
@@ -286,13 +315,7 @@ export function createMotorScene(
     }
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
-    const wasPortrait = isPortrait;
-    isPortrait = camera.aspect < 1;
-    if (wasPortrait === isPortrait) {
-      fitView();
-    } else {
-      resetView();
-    }
+    fitView(true);
   }
 
   function labelPositions(): LabelPosition[] {
@@ -310,6 +333,10 @@ export function createMotorScene(
 
   function renderFrame(): void {
     requestAnimationFrame(renderFrame);
+    if (fitted === null) {
+      // 描画領域がまだ大きさを持たない間は，画角を決められない．
+      return;
+    }
     const hasMoved = controls.update();
     if (!needsRender && !hasMoved) {
       return;
@@ -329,11 +356,11 @@ export function createMotorScene(
     }
   }
 
-  // 横長の向きを仮に置く．縦長の画面では resize が向きを切り替える．
-  camera.position.set(...LANDSCAPE_VIEW);
   applyFactor();
+  placeDefaultView();
   resize();
-  renderFrame();
+  // 呼び出し側が番号ラベルなどを用意し終えてから，最初の描画を行う．
+  requestAnimationFrame(renderFrame);
 
   return {
     setFactor(value) {
@@ -343,7 +370,7 @@ export function createMotorScene(
       }
       factor = next;
       applyFactor();
-      fitView();
+      fitView(false);
     },
     setHighlight(id) {
       if (id === highlighted) {
@@ -392,6 +419,13 @@ export function createMotorScene(
       camera.position.copy(controls.target).add(offset.setLength(distance));
       controls.update();
       needsRender = true;
+    },
+    setPortrait(portrait) {
+      if (portrait === isPortrait) {
+        return;
+      }
+      isPortrait = portrait;
+      resetView();
     },
     resetView,
     resize,
