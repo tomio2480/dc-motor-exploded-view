@@ -1,15 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { openSite, waitForFrames } from "./helpers";
 
 const PART_COUNT = 10;
 const ANIMATION_TIMEOUT_MS = 20_000;
-
-async function openSite(page: Page): Promise<void> {
-  // アニメーションを省き，表示の完了を待たずに検証できるようにする．
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("./");
-  await expect(page.locator("#stage")).toHaveAttribute("data-ready", "true");
-}
 
 async function canvasCenter(page: Page): Promise<{ x: number; y: number }> {
   const box = await page.locator("canvas#scene").boundingBox();
@@ -22,17 +16,8 @@ async function canvasCenter(page: Page): Promise<{ x: number; y: number }> {
 
 /** 2 つの番号ラベルの間隔を，表示の拡大率の目安として返す． */
 async function labelSpan(page: Page): Promise<number> {
-  // 領域の大きさの変化が描画と番号の配置へ反映されるまで，2 フレーム待つ．
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            resolve();
-          });
-        });
-      }),
-  );
+  // 領域の大きさの変化が描画と番号の配置へ反映されるまで待つ．
+  await waitForFrames(page);
   const first = await page
     .getByRole("button", { name: "1 軸受" })
     .boundingBox();
@@ -340,5 +325,6 @@ test("WebGL を使えない環境では，部品の解説を文章で表示す�
   await expect(fallback.getByRole("listitem")).toHaveCount(PART_COUNT);
   await expect(fallback).toContainText("電流の向きを切り替える");
   await expect(page.locator("#labels button")).toHaveCount(0);
-  await expect(page.locator(".controls")).toBeHidden();
+  await expect(page.locator("#controls-parts")).toBeHidden();
+  await expect(page.locator("#tabs")).toBeHidden();
 });

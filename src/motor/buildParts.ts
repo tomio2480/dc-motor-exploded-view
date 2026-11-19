@@ -53,7 +53,7 @@ const PROFILE_TO_MODEL = new Matrix4().set(
   ...[0, 0, 0, 1],
 );
 
-function toVectors(points: readonly Point2[]): Vector2[] {
+export function toVectors(points: readonly Point2[]): Vector2[] {
   return points.map(([u, v]) => new Vector2(u, v));
 }
 
@@ -82,7 +82,7 @@ function rectanglePath(
 }
 
 /** y-z 平面の断面を，x 軸に沿って rearX から frontX まで押し出す． */
-function extrudeAlongX(
+export function extrudeAlongX(
   shape: Shape,
   rearX: number,
   frontX: number,
@@ -312,7 +312,7 @@ function coilLayerShape(): Shape {
 }
 
 /** 軸方向の位置・軸からの距離・軸まわりの角度で表した点を，モデルの座標へ直す． */
-function cylindrical(x: number, radius: number, angle: number): Vector3 {
+export function cylindrical(x: number, radius: number, angle: number): Vector3 {
   return new Vector3(x, radius * Math.cos(angle), radius * Math.sin(angle));
 }
 
@@ -465,7 +465,7 @@ const SIDES = [1, -1] as const;
 /** ブラシが整流子へ触れる面の y 座標の絶対値． */
 const BRUSH_CONTACT_Y = COMMUTATOR.outerRadius;
 /** 端子の板の中心の y 座標の絶対値．板の外側の縁をブラシの外面へそろえる． */
-const TERMINAL_CENTER_Y =
+export const TERMINAL_CENTER_Y =
   BRUSH_CONTACT_Y + BRUSH.thickness - TERMINAL.widthY / 2;
 
 function buildBrushes(): Object3D[] {

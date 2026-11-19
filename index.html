@@ -62,6 +62,27 @@
         <h1>小型 DC モーターの 3D 展開図</h1>
         <p>130 型相当のブラシ付きモーター</p>
       </div>
+      <div class="tabs" id="tabs" role="tablist" aria-label="表示の切り替え">
+        <button
+          type="button"
+          role="tab"
+          id="tab-parts"
+          aria-selected="true"
+          aria-controls="stage"
+        >
+          部品を知る
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-mechanism"
+          aria-selected="false"
+          aria-controls="stage"
+          tabindex="-1"
+        >
+          回るしくみ
+        </button>
+      </div>
       <details class="parts-panel" id="parts-panel">
         <summary id="parts-summary">部品一覧</summary>
         <ol class="parts-list" id="parts-list"></ol>
@@ -69,7 +90,7 @@
     </header>
 
     <main class="viewport">
-      <div class="stage" id="stage">
+      <div class="stage" id="stage" role="tabpanel" aria-labelledby="tab-parts">
         <canvas
           id="scene"
           role="img"
@@ -80,6 +101,8 @@
           矢印キーで視点を回転し，プラスとマイナスのキーで拡大と縮小ができます．各部品の解説は，番号のボタンまたは部品一覧から表示できます．
         </p>
         <ol class="labels" id="labels" aria-label="部品の番号" hidden></ol>
+        <!-- 記号の意味は段階の説明文で伝えるため，支援技術には伝えない． -->
+        <div class="markers" id="markers" aria-hidden="true" hidden></div>
         <p class="stage__hint" aria-hidden="true">
           ドラッグや矢印キーで回転・ホイールやピンチで拡大・部品にふれると解説
         </p>
@@ -101,9 +124,23 @@
       >
         <h2 class="visually-hidden" id="part-info-title">部品の解説</h2>
       </section>
+      <section
+        class="part-info"
+        id="step-info"
+        aria-labelledby="step-info-title"
+        aria-live="polite"
+        hidden
+      >
+        <h2 class="visually-hidden" id="step-info-title">回るしくみの説明</h2>
+        <div class="part-info__header">
+          <span class="part-info__number" id="step-number"></span>
+          <p class="part-info__name" id="step-title"></p>
+        </div>
+        <p class="part-info__description" id="step-description"></p>
+      </section>
     </main>
 
-    <form class="controls" aria-label="表示の操作">
+    <form class="controls" id="controls-parts" aria-label="展開図の操作">
       <button type="button" class="button button--primary" id="toggle-explode">
         組み立てる
       </button>
@@ -124,6 +161,42 @@
 
     <!-- 同じ内容を番号のボタンと部品一覧から取得できるため，支援技術には伝えない． -->
     <div class="part-tooltip" id="part-tooltip" aria-hidden="true" hidden></div>
+    <form
+      class="controls controls--mechanism"
+      id="controls-mechanism"
+      aria-label="回るしくみの操作"
+      hidden
+    >
+      <div class="controls__steps">
+        <button type="button" class="button" id="step-prev">前へ</button>
+        <span class="controls__position" id="step-position"></span>
+        <button type="button" class="button button--primary" id="step-next">
+          次へ
+        </button>
+      </div>
+      <div class="controls__slider">
+        <label for="rotor-angle">回転子の角度</label>
+        <input
+          type="range"
+          id="rotor-angle"
+          min="0"
+          max="359"
+          step="1"
+          value="0"
+        />
+        <output id="rotor-angle-output" for="rotor-angle">0°</output>
+      </div>
+      <button type="button" class="button" id="rotor-play">回す</button>
+      <button
+        type="button"
+        class="button button--toggle"
+        id="reverse-polarity"
+        aria-pressed="false"
+      >
+        電源を逆につなぐ
+      </button>
+    </form>
+
     <p class="visually-hidden" id="announcer" aria-live="polite"></p>
   </body>
 </html>
