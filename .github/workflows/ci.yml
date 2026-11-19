@@ -74,10 +74,39 @@ jobs:
       - name: Check complexity
         run: npm run complexity
 
+  # E2E のジョブで使うコンテナの版を，導入している @playwright/test の版へ合わせる．
+  playwright-version:
+    name: Playwright の版の取得
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the installed version from the lockfile
+        id: read
+        run: |
+          version="$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
   e2e:
     name: E2E・アクセシビリティ検査（${{ matrix.browser }}）
+    needs: playwright-version
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # ブラウザーと依存ライブラリを導入済みの，Playwright の公式コンテナで実行する．
+    # 実行のたびに apt で導入すると，配布元が遅いときにジョブが終わらないためである．
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.playwright-version.outputs.version }}-noble
+      # Chromium が共有メモリの不足で落ちないようにする．
+      options: --ipc=host
+    env:
+      # コンテナは root で動く．Firefox は HOME の所有者が実行者と異なると起動しない．
+      HOME: /root
     strategy:
       fail-fast: false
       matrix:
@@ -100,11 +129,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Install browser
-        env:
-          BROWSER: ${{ matrix.browser }}
-        run: npx playwright install --with-deps "${BROWSER}"
 
       # GPU のない実行環境では，画面なしの Firefox が WebGL を作れない．
       # 仮想画面の上で実行し，Firefox だけ画面ありで起動する．
