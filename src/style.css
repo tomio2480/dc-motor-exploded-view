@@ -155,10 +155,10 @@ input {
   border-radius: 999px;
 }
 
+/* 選択中のタブは，文字の色だけでなく地の色でも区別できるようにする． */
 .tabs [role="tab"][aria-selected="true"] {
-  color: var(--ink);
-  background: var(--surface-solid);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
+  color: var(--on-accent);
+  background: var(--accent);
 }
 
 /* ---- 部品一覧 ---- */
@@ -570,7 +570,7 @@ body[data-state="error"]
   font-size: 0.9rem;
 }
 
-.controls__slider output {
+.controls__slider span {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
   text-align: right;

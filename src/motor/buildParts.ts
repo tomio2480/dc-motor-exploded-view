@@ -320,6 +320,10 @@ export function cylindrical(x: number, radius: number, angle: number): Vector3 {
 const TAB_CENTER_X = COMMUTATOR.frontX - COMMUTATOR.tabLength / 2;
 /** 巻線が鉄心の後ろへはみ出した端の，軸方向の位置． */
 const COIL_REAR_X = CORE.rearX - WINDING.thickness;
+/** 突起の中心から，両隣の銅片の中心までの角度． */
+const SEGMENT_HALF_STEP = FULL_TURN / (2 * COMMUTATOR.segmentCount);
+/** 引き出し線の断面を多角形で近似するときの辺の数． */
+const LEAD_RADIAL_SEGMENTS = 6;
 /** 引き出し線の付け根を巻線の中へ埋める深さ． */
 const LEAD_EMBED_DEPTH = 0.3;
 /** 引き出し線の曲がりの頂点を，巻線の端から後ろへずらす距離． */
@@ -334,7 +338,9 @@ function createLead(pole: number, side: 1 | -1): BufferGeometry {
   const startRadius = Math.hypot(coilRadius, WINDING.leadOffset);
   const startAngle =
     poleAngle(pole) + side * Math.atan2(WINDING.leadOffset, coilRadius);
-  const endAngle = segmentAngle(side === 1 ? pole : pole - 1);
+  // 銅片の角度は 0 から 1 回転の間へそろえた値で返るため，使わない．
+  // 始点から連続した角度で終点を表し，曲がりの頂点が反対側へ回らないようにする．
+  const endAngle = poleAngle(pole) + side * SEGMENT_HALF_STEP;
 
   const path = new QuadraticBezierCurve3(
     cylindrical(COIL_REAR_X + LEAD_EMBED_DEPTH, startRadius, startAngle),
@@ -350,7 +356,7 @@ function createLead(pole: number, side: 1 | -1): BufferGeometry {
     path,
     ARC_SEGMENTS / 2,
     WINDING.leadRadius,
-    6,
+    LEAD_RADIAL_SEGMENTS,
     false,
   ).toNonIndexed();
 }

@@ -100,6 +100,9 @@
         <p class="visually-hidden" id="scene-help">
           矢印キーで視点を回転し，プラスとマイナスのキーで拡大と縮小ができます．各部品の解説は，番号のボタンまたは部品一覧から表示できます．
         </p>
+        <p class="visually-hidden" id="scene-help-mechanism">
+          「前へ」と「次へ」のボタンで段階を移り，説明文で内容を確かめられます．矢印キーで視点を回転し，プラスとマイナスのキーで拡大と縮小ができます．
+        </p>
         <ol class="labels" id="labels" aria-label="部品の番号" hidden></ol>
         <!-- 記号の意味は段階の説明文で伝えるため，支援技術には伝えない． -->
         <div class="markers" id="markers" aria-hidden="true" hidden></div>
@@ -154,7 +157,8 @@
           step="1"
           value="100"
         />
-        <output id="explode-output" for="explode">100%</output>
+        <!-- 値は aria-valuetext で伝える．変わるたびに読み上げられないよう，支援技術には伝えない． -->
+        <span id="explode-output" aria-hidden="true">100%</span>
       </div>
       <button type="button" class="button" id="reset-view">視点を戻す</button>
     </form>
@@ -184,7 +188,7 @@
           step="1"
           value="0"
         />
-        <output id="rotor-angle-output" for="rotor-angle">0°</output>
+        <span id="rotor-angle-output" aria-hidden="true">0°</span>
       </div>
       <button type="button" class="button" id="rotor-play">回す</button>
       <button

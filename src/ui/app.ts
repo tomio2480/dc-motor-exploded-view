@@ -138,7 +138,7 @@ export function startApp(): void {
   );
   startExplodeController({
     slider: requireElement("explode", HTMLInputElement),
-    output: requireElement("explode-output", HTMLOutputElement),
+    output: requireElement("explode-output", HTMLElement),
     toggleButton: requireElement("toggle-explode", HTMLButtonElement),
     isMotionReduced: () => reducedMotion.matches,
     onChange: scene.setFactor,
@@ -153,7 +153,7 @@ export function startApp(): void {
       previousButton: requireElement("step-prev", HTMLButtonElement),
       nextButton: requireElement("step-next", HTMLButtonElement),
       angleSlider: requireElement("rotor-angle", HTMLInputElement),
-      angleOutput: requireElement("rotor-angle-output", HTMLOutputElement),
+      angleOutput: requireElement("rotor-angle-output", HTMLElement),
       playButton: requireElement("rotor-play", HTMLButtonElement),
       reverseButton: requireElement("reverse-polarity", HTMLButtonElement),
     },
@@ -183,6 +183,17 @@ export function startApp(): void {
     stepInfo.hidden = !isMechanism;
     stage.setAttribute("aria-labelledby", tabs[index]?.id ?? "");
     stage.dataset.mode = mode;
+    // 3D の表示の名前と操作の案内を，表示の種類に合わせる．
+    canvas.setAttribute(
+      "aria-label",
+      isMechanism
+        ? "回るしくみを示す小型 DC モーターの 3D 表示"
+        : "小型 DC モーターの 3D 展開図",
+    );
+    canvas.setAttribute(
+      "aria-describedby",
+      isMechanism ? "scene-help-mechanism" : "scene-help",
+    );
     scene.setMode(mode);
     mechanism.setActive(isMechanism);
   }

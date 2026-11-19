@@ -22,6 +22,10 @@ export function bindTabs(
   onSelect: (index: number) => void,
 ): void {
   function select(index: number): void {
+    // 選択中のタブを選び直しても，表示をやり直さない．
+    if (tabs[index]?.getAttribute("aria-selected") === "true") {
+      return;
+    }
     tabs.forEach((tab, tabIndex) => {
       const isSelected = tabIndex === index;
       tab.setAttribute("aria-selected", String(isSelected));
@@ -35,8 +39,10 @@ export function bindTabs(
       select(index);
     });
     tab.addEventListener("keydown", (event) => {
+      // Alt + 矢印キーなどのブラウザーの操作を妨げない．
+      const hasModifier = event.altKey || event.ctrlKey || event.metaKey;
       const next = targetIndex(event.key, index, tabs.length);
-      if (next === null) {
+      if (hasModifier || next === null) {
         return;
       }
       event.preventDefault();

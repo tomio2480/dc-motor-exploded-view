@@ -92,6 +92,7 @@ export function torqueFactors(
   polarity: Polarity,
 ): number[] {
   return coilCurrents(rotorAngle, polarity).map(
+    // 負の値に 0 を掛けた結果の -0 を，0 を足して 0 へそろえる．
     (current, pole) => current * Math.sin(poleAngle(pole, rotorAngle)) + 0,
   );
 }

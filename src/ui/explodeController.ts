@@ -10,7 +10,7 @@ const EXPLODED_THRESHOLD = 0.5;
 
 export interface ExplodeControllerOptions {
   readonly slider: HTMLInputElement;
-  readonly output: HTMLOutputElement;
+  readonly output: HTMLElement;
   readonly toggleButton: HTMLButtonElement;
   /** アニメーションを省くかどうかを，操作のたびに問い合わせる． */
   readonly isMotionReduced: () => boolean;

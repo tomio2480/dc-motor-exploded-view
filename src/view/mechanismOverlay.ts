@@ -76,8 +76,11 @@ const FORCE_COLOR = 0x15803d;
 /** 突起の先を覆う極の表示の厚み． */
 const POLE_CAP_THICKNESS = 0.12;
 /** 力の矢印を置く位置．巻線の後ろの端より手前へ出す． */
-const ARROW_X = CORE.rearX - WINDING.thickness - 0.6;
-const ARROW_RADIUS = CORE.headOuterRadius - 0.4;
+const ARROW_REAR_OFFSET = 0.6;
+const ARROW_X = CORE.rearX - WINDING.thickness - ARROW_REAR_OFFSET;
+/** 力の矢印の根元を，突起の外周から内側へ寄せる距離． */
+const ARROW_INSET = 0.4;
+const ARROW_RADIUS = CORE.headOuterRadius - ARROW_INSET;
 const ARROW_SHAFT_RADIUS = 0.18;
 const ARROW_HEAD_RADIUS = 0.5;
 const ARROW_HEAD_LENGTH = 1.1;
@@ -87,6 +90,12 @@ const ARROW_MAX_LENGTH = 3.6;
 const MIN_VISIBLE_TORQUE = 0.03;
 /** 矢印がほかの部品に隠れないよう，最後に重ねて描く． */
 const OVERLAY_RENDER_ORDER = 10;
+/** 円弧や円を多角形で近似するときの分割数． */
+const POLE_CAP_ARC_SEGMENTS = 12;
+const ARROW_SHAFT_SEGMENTS = 12;
+const ARROW_HEAD_SEGMENTS = 16;
+/** ブラシに触れない銅片と，それにつながる巻線に流れる電流の比． */
+const HALF_CURRENT = 0.5;
 
 interface ForceArrow {
   readonly group: Group;
@@ -147,7 +156,7 @@ function createPoleCap(pole: number): BufferGeometry {
           outerRadius: CORE.headOuterRadius + POLE_CAP_THICKNESS,
           centerAngle: poleAngle(pole),
           halfSpan: CORE.headHalfSpan,
-          segments: 12,
+          segments: POLE_CAP_ARC_SEGMENTS,
         }),
       ),
     );
@@ -176,16 +185,16 @@ function createForceArrow(): ForceArrow {
       ARROW_SHAFT_RADIUS,
       ARROW_SHAFT_RADIUS,
       1,
-      12,
+      ARROW_SHAFT_SEGMENTS,
     ).translate(0, 0.5, 0),
     material,
   );
   const head = new Mesh(
-    new ConeGeometry(ARROW_HEAD_RADIUS, ARROW_HEAD_LENGTH, 16).translate(
-      0,
-      ARROW_HEAD_LENGTH / 2,
-      0,
-    ),
+    new ConeGeometry(
+      ARROW_HEAD_RADIUS,
+      ARROW_HEAD_LENGTH,
+      ARROW_HEAD_SEGMENTS,
+    ).translate(0, ARROW_HEAD_LENGTH / 2, 0),
     material,
   );
   shaft.renderOrder = OVERLAY_RENDER_ORDER;
@@ -298,7 +307,7 @@ export function createMechanismOverlay(parts: MotorParts): MechanismOverlay {
     // ブラシに触れない銅片も，隣り合う巻線の間で半分の電流を受け渡す．
     const contacts = segmentContacts(view.rotorAngle);
     segmentMaterials.forEach((material, segment) => {
-      const level = contacts[segment] === "none" ? 0.5 : 1;
+      const level = contacts[segment] === "none" ? HALF_CURRENT : 1;
       setGlow(material, reachesCoils ? level : 0);
     });
   }

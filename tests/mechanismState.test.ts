@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   advanceAngle,
+  displayDegrees,
   goToStep,
   INITIAL_MECHANISM_STATE,
   reversePolarity,
@@ -85,5 +86,16 @@ describe("advanceAngle", () => {
 
   test("経過時間が負の場合は拒否する", () => {
     expect(() => advanceAngle(0, 90, -1)).toThrow(RangeError);
+  });
+});
+
+describe("displayDegrees", () => {
+  test("角度を整数の度へ丸める", () => {
+    expect(displayDegrees(40.4)).toBe(40);
+    expect(displayDegrees(40.6)).toBe(41);
+  });
+
+  test("360 度へ丸まる角度は 0 度として表す", () => {
+    expect(displayDegrees(359.6)).toBe(0);
   });
 });

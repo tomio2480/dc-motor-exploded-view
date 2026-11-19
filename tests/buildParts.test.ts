@@ -1,13 +1,21 @@
 import { Box3, Mesh, type Object3D, Vector3 } from "three";
 import { describe, expect, test } from "vitest";
 import { buildMotorParts } from "../src/motor/buildParts";
-import { CASE, COMMUTATOR, CORE, MAGNET } from "../src/motor/dimensions";
+import {
+  CASE,
+  COMMUTATOR,
+  CORE,
+  MAGNET,
+  WINDING,
+} from "../src/motor/dimensions";
 import { EXPLODE_OFFSETS, LABEL_LINES } from "../src/motor/layout";
 import { PART_IDS, type PartId } from "../src/motor/parts";
 
 const TOLERANCE = 1e-6;
 /** 材質と個片が異なるものだけを別のメッシュにしたときの総数． */
 const MAX_MESH_COUNT = 18;
+/** 巻線の層の丸みを引き出し線と取り違えないための余裕． */
+const LEAD_REGION_MARGIN = 0.05;
 const parts = buildMotorParts();
 const eachPart = PART_IDS.map((id) => ({ id }));
 
@@ -125,6 +133,23 @@ describe("巻線と整流子の配線", () => {
     const radius = maxRadiusOf("commutator");
     expect(radius).toBeGreaterThan(COMMUTATOR.outerRadius + 0.3);
     expect(radius).toBeLessThan(MAGNET.innerRadius);
+  });
+
+  test("引き出し線は，整流子より内側のシャフトの側を通らない", () => {
+    // 巻線の後ろの端より後ろにある頂点は，引き出し線だけである．
+    const coilRearX = CORE.rearX - WINDING.thickness;
+    const vertex = new Vector3();
+    let innermost = Number.POSITIVE_INFINITY;
+    for (const mesh of meshesOf(parts.windings)) {
+      const positions = mesh.geometry.getAttribute("position");
+      for (let index = 0; index < positions.count; index += 1) {
+        vertex.fromBufferAttribute(positions, index);
+        if (vertex.x < coilRearX - LEAD_REGION_MARGIN) {
+          innermost = Math.min(innermost, Math.hypot(vertex.y, vertex.z));
+        }
+      }
+    }
+    expect(innermost).toBeGreaterThan(COMMUTATOR.outerRadius);
   });
 
   test("引き出し線の先は，整流子の突起の高さにある", () => {

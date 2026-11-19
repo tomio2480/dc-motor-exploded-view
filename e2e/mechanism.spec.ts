@@ -4,6 +4,7 @@ import { openSite } from "./helpers";
 
 const STEP_COUNT = 6;
 const ANIMATION_TIMEOUT_MS = 20_000;
+const SLOW_TEST_TIMEOUT_MS = 120_000;
 
 function marker(page: Page, id: string): Locator {
   return page.locator(`#markers [data-marker="${id}"]`);
@@ -71,6 +72,28 @@ test.describe("表示の切り替え", () => {
     await expect(page.locator("#part-info")).toBeHidden();
   });
 
+  test("選択中のタブをもう一度押しても，開いている解説を閉じない", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "7 整流子" }).click();
+    await page.getByRole("tab", { name: "部品を知る" }).click();
+    await expect(page.locator("#part-info")).toBeVisible();
+  });
+
+  test("3D の表示の名前は，選んだタブに合わせて変わる", async ({ page }) => {
+    await expect(page.getByRole("img", { name: /展開図/ })).toBeVisible();
+    await page.getByRole("tab", { name: "回るしくみ" }).click();
+    await expect(page.getByRole("img", { name: /回るしくみ/ })).toBeVisible();
+    await expect(
+      page.getByRole("img", { name: /回るしくみ/ }),
+    ).toHaveAccessibleDescription(/前へ.*次へ/);
+  });
+
+  test("値の表示は，読み上げ用の領域として扱わない", async ({ page }) => {
+    // スライダーの値は aria-valuetext で伝える．値の表示が変わるたびに読み上げない．
+    await expect(page.getByRole("status")).toHaveCount(0);
+  });
+
   test("タブは矢印キーで切り替えられる", async ({ page }) => {
     const partsTab = page.getByRole("tab", { name: "部品を知る" });
     const mechanismTab = page.getByRole("tab", { name: "回るしくみ" });
@@ -95,6 +118,17 @@ test.describe("回るしくみ", () => {
     await goToStep(page, STEP_COUNT);
     await expect(page.getByRole("button", { name: "次へ" })).toBeDisabled();
     await expect(page.locator("#step-info")).toContainText("回り続ける");
+  });
+
+  test("端の段階で押せなくなったボタンから，フォーカスを反対のボタンへ移す", async ({
+    page,
+  }) => {
+    await goToStep(page, STEP_COUNT);
+    await expect(page.getByRole("button", { name: "前へ" })).toBeFocused();
+    for (let step = STEP_COUNT; step > 1; step -= 1) {
+      await page.getByRole("button", { name: "前へ" }).click();
+    }
+    await expect(page.getByRole("button", { name: "次へ" })).toBeFocused();
   });
 
   test("「前へ」で前の段階へ戻る", async ({ page }) => {
@@ -190,4 +224,42 @@ test("回転を見せる段階では，回転子が自動で回る", async ({ pa
     timeout: ANIMATION_TIMEOUT_MS,
   });
   await expect(page.getByRole("button", { name: "止める" })).toBeVisible();
+});
+
+test("段階を行き来しても，回転の更新は 1 フレームに 1 回だけ行う", async ({
+  page,
+}) => {
+  // GPU のない環境では回転中の描画が遅く，操作のたびに時間がかかる．
+  test.setTimeout(SLOW_TEST_TIMEOUT_MS);
+  await page.goto("./");
+  await expect(page.locator("#stage")).toHaveAttribute("data-ready", "true", {
+    timeout: ANIMATION_TIMEOUT_MS,
+  });
+  await page.getByRole("tab", { name: "回るしくみ" }).click();
+  await goToStep(page, 5);
+  const next = page.getByRole("button", { name: "次へ" });
+  const previous = page.getByRole("button", { name: "前へ" });
+  // 不具合があると，段階を移るたびに回転を進める処理が 1 つずつ増える．
+  await next.click();
+  await previous.click();
+
+  const FRAME_COUNT = 10;
+  const updates = await page.evaluate(async (frameCount) => {
+    const output = document.querySelector("#rotor-angle-output");
+    if (output === null) {
+      throw new Error("角度の表示が見つからない");
+    }
+    let count = 0;
+    const observer = new MutationObserver((records) => {
+      count += records.length;
+    });
+    observer.observe(output, { childList: true });
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    observer.disconnect();
+    return count;
+  }, FRAME_COUNT);
+  expect(updates).toBeGreaterThan(0);
+  expect(updates).toBeLessThanOrEqual(FRAME_COUNT + 1);
 });

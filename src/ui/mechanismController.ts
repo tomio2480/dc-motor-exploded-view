@@ -2,6 +2,7 @@ import { MECHANISM_STEPS, type MechanismStep } from "../motor/mechanismSteps";
 import type { MechanismView } from "../view/mechanismOverlay";
 import {
   advanceAngle,
+  displayDegrees,
   goToStep,
   INITIAL_MECHANISM_STATE,
   type MechanismUiState,
@@ -21,7 +22,7 @@ export interface MechanismElements {
   readonly previousButton: HTMLButtonElement;
   readonly nextButton: HTMLButtonElement;
   readonly angleSlider: HTMLInputElement;
-  readonly angleOutput: HTMLOutputElement;
+  readonly angleOutput: HTMLElement;
   readonly playButton: HTMLButtonElement;
   readonly reverseButton: HTMLButtonElement;
 }
@@ -66,6 +67,18 @@ export function startMechanismController(
   let state = INITIAL_MECHANISM_STATE;
   let isActive = false;
   let lastFrameTime: number | null = null;
+  /** 回転を進める処理が，次の描画へ予約されているかどうか． */
+  let isLoopScheduled = false;
+
+  /** 押せなくなったボタンにフォーカスが残らないよう，反対のボタンへ移す． */
+  function moveFocusFrom(
+    disabled: HTMLButtonElement,
+    other: HTMLButtonElement,
+  ): void {
+    if (document.activeElement === disabled) {
+      other.focus();
+    }
+  }
 
   function renderStep(): void {
     const step = currentStep(state);
@@ -73,13 +86,24 @@ export function startMechanismController(
     elements.stepTitle.textContent = step.title;
     elements.stepDescription.textContent = step.description;
     elements.stepPosition.textContent = `${state.stepIndex + 1} / ${MECHANISM_STEPS.length}`;
-    elements.previousButton.disabled = state.stepIndex === 0;
-    elements.nextButton.disabled =
-      state.stepIndex === MECHANISM_STEPS.length - 1;
+    const { previousButton, nextButton } = elements;
+    const isFirst = state.stepIndex === 0;
+    const isLast = state.stepIndex === MECHANISM_STEPS.length - 1;
+    // フォーカスの移り先を先に押せる状態へ戻してから，端のボタンを押せなくする．
+    if (isFirst) {
+      nextButton.disabled = false;
+      moveFocusFrom(previousButton, nextButton);
+    }
+    if (isLast) {
+      previousButton.disabled = false;
+      moveFocusFrom(nextButton, previousButton);
+    }
+    previousButton.disabled = isFirst;
+    nextButton.disabled = isLast;
   }
 
   function renderRotor(): void {
-    const degrees = Math.round(state.angleDegrees);
+    const degrees = displayDegrees(state.angleDegrees);
     elements.angleSlider.value = String(degrees);
     elements.angleSlider.setAttribute("aria-valuetext", `${degrees} 度`);
     elements.angleOutput.textContent = `${degrees}°`;
@@ -93,6 +117,7 @@ export function startMechanismController(
 
   function rotate(time: number): void {
     if (!state.isPlaying || !isActive) {
+      isLoopScheduled = false;
       lastFrameTime = null;
       return;
     }
@@ -109,10 +134,11 @@ export function startMechanismController(
   }
 
   function setPlaying(isPlaying: boolean): void {
-    const wasPlaying = state.isPlaying;
     state = { ...state, isPlaying };
     renderRotor();
-    if (isPlaying && !wasPlaying) {
+    // 止めた直後に再開しても，回転を進める処理を二重に予約しない．
+    if (isPlaying && !isLoopScheduled) {
+      isLoopScheduled = true;
       requestAnimationFrame(rotate);
     }
   }

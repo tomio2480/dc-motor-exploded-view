@@ -71,3 +71,8 @@ export function advanceAngle(
     angleDegrees + (speedDegreesPerSecond * elapsedMs) / 1000,
   );
 }
+
+/** 表示とスライダーに使う，整数の度で表した角度を返す． */
+export function displayDegrees(angleDegrees: number): number {
+  return Math.round(normalizeDegrees(angleDegrees)) % FULL_TURN_DEGREES;
+}
