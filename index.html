@@ -68,28 +68,30 @@
       </details>
     </header>
 
-    <main class="stage" id="stage">
-      <canvas
-        id="scene"
-        role="img"
-        aria-label="小型 DC モーターの 3D 展開図"
-        aria-describedby="scene-help"
-      ></canvas>
-      <p class="visually-hidden" id="scene-help">
-        矢印キーで視点を回転し，プラスとマイナスのキーで拡大と縮小ができます．各部品の解説は，番号のボタンまたは部品一覧から表示できます．
-      </p>
-      <ol class="labels" id="labels" aria-label="部品の番号"></ol>
-      <p class="stage__hint" aria-hidden="true">
-        ドラッグや矢印キーで回転・ホイールやピンチで拡大・部品にふれると解説
-      </p>
-      <p class="stage__error" id="stage-error" role="alert" hidden>
-        この環境では 3D を表示できませんでした．WebGL に対応したブラウザーでご覧ください．
-      </p>
-      <noscript>
-        <p class="stage__error">
-          3D の展開図を表示するには JavaScript を有効にしてください．
+    <main class="viewport">
+      <div class="stage" id="stage">
+        <canvas
+          id="scene"
+          role="img"
+          aria-label="小型 DC モーターの 3D 展開図"
+          aria-describedby="scene-help"
+        ></canvas>
+        <p class="visually-hidden" id="scene-help">
+          矢印キーで視点を回転し，プラスとマイナスのキーで拡大と縮小ができます．各部品の解説は，番号のボタンまたは部品一覧から表示できます．
         </p>
-      </noscript>
+        <ol class="labels" id="labels" aria-label="部品の番号"></ol>
+        <p class="stage__hint" aria-hidden="true">
+          ドラッグや矢印キーで回転・ホイールやピンチで拡大・部品にふれると解説
+        </p>
+        <p class="stage__error" id="stage-error" role="alert" hidden>
+          この環境では 3D を表示できませんでした．WebGL に対応したブラウザーでご覧ください．
+        </p>
+        <noscript>
+          <p class="stage__error">
+            3D の展開図を表示するには JavaScript を有効にしてください．
+          </p>
+        </noscript>
+      </div>
       <section
         class="part-info"
         id="part-info"

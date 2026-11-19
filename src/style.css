@@ -228,6 +228,13 @@ input {
 
 /* ---- 3D の表示領域 ---- */
 
+.viewport {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
 .stage {
   position: relative;
   min-height: 0;
@@ -478,9 +485,12 @@ input {
     display: none;
   }
 
+  /* 狭い画面では解説を 3D の下へ並べ，選んだ部品を隠さないようにする． */
   .part-info[data-mode="docked"] {
-    right: var(--gutter);
+    position: static;
     width: auto;
+    margin: 0 var(--gutter) 10px;
+    box-shadow: none;
   }
 
   .stage__hint {
