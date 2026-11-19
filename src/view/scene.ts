@@ -247,6 +247,8 @@ export function createMotorScene(
     FRAME_METER_WINDOW,
     FRAME_METER_MAX_GAP_MS,
   );
+  /** 描画先の画素数を受け取る入れ物．描画のたびに作り直さないよう使い回す． */
+  const bufferSize = new Vector2();
   // 指定どおりにならない環境もあるため，実際の設定を問い合わせる．
   const hasAntialias =
     renderer.getContext().getContextAttributes()?.antialias === true;
@@ -559,7 +561,7 @@ export function createMotorScene(
     needsRender = false;
     renderer.render(scene, camera);
     frameMeter.record(time);
-    const bufferSize = renderer.getDrawingBufferSize(new Vector2());
+    renderer.getDrawingBufferSize(bufferSize);
     options.onRender({
       frame: {
         intervalMs: frameMeter.typicalIntervalMs(),
