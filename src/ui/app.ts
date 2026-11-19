@@ -4,7 +4,9 @@ import {
   type RenderInfo,
   type ViewMode,
 } from "../view/scene";
+import { parseQualityOptions } from "../view/quality";
 import { requireElement } from "./dom";
+import { createFrameStatsView } from "./frameStats";
 import { startExplodeController } from "./explodeController";
 import { createInfoController } from "./infoController";
 import { bindKeyboard } from "./keyboardInput";
@@ -34,11 +36,21 @@ export function startApp(): void {
   const readLineColor = (): string =>
     getComputedStyle(stage).getPropertyValue("--line").trim();
 
+  // 実機で重さの原因を切り分けるため，描画の設定を URL のクエリで変えられる．
+  const quality = parseQualityOptions(window.location.search);
+  if (!quality.usesBackdropBlur) {
+    document.documentElement.dataset.blur = "off";
+  }
+  const showFrameStats = quality.showsFrameStats
+    ? createFrameStatsView(requireElement("frame-stats", HTMLElement), quality)
+    : null;
+
   // WebGL を使えない環境ではここで例外が発生し，以降の操作部品は作らない．
   const scene = createMotorScene(canvas, {
     reducedMotion: reducedMotion.matches,
     portrait: portrait.matches,
     lineColor: readLineColor(),
+    quality,
     onRender: placeOverlays,
   });
 
@@ -59,6 +71,7 @@ export function startApp(): void {
       }
     }
     placeMarkers(info.markers);
+    showFrameStats?.(info.frame);
   }
 
   /** 解説を閉じたあと，選んでいた部品の番号へフォーカスを戻す． */

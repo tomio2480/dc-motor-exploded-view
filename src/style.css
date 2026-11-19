@@ -356,6 +356,29 @@ body[data-state="error"]
   color: var(--accent);
 }
 
+/* ---- 描画の診断 ---- */
+
+.frame-stats {
+  position: absolute;
+  top: 8px;
+  left: var(--gutter);
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  pointer-events: none;
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+/* 診断で背景ぼかしを切ったときは，解説欄を不透明にする． */
+:root[data-blur="off"] :is(.part-info, .part-tooltip) {
+  background: var(--surface-solid);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* ---- 回るしくみの記号 ---- */
 
 .markers {

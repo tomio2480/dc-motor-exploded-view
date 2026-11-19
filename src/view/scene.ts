@@ -27,11 +27,13 @@ import { isPartId, PART_IDS, type PartId } from "../motor/parts";
 import type { Vec3 } from "../vec3";
 import { fitDistance, viewBasis } from "./cameraFit";
 import { smoothingFactor } from "./ease";
+import { createFrameMeter } from "./frameMeter";
 import {
   createMechanismOverlay,
   type MarkerTone,
   type MechanismView,
 } from "./mechanismOverlay";
+import type { QualityOptions } from "./quality";
 import { clampFactor, explodedOffset, labelOpacity } from "./explode";
 
 /** 番号ラベルを置く画面上の位置．描画領域の左上を原点とする CSS ピクセル． */
@@ -61,6 +63,18 @@ export interface RenderInfo {
   readonly labelOpacity: number;
   /** 回るしくみの記号．展開図の表示では空になる． */
   readonly markers: readonly MarkerPosition[];
+  readonly frame: FrameStats;
+}
+
+/** 描画の速さと，描画先の大きさ．重さの原因を切り分けるために使う． */
+export interface FrameStats {
+  /** 直近の連続した描画での，フレーム間隔の中央値（ミリ秒）．測れていなければ null． */
+  readonly intervalMs: number | null;
+  /** 描画先の横と縦の画素数． */
+  readonly width: number;
+  readonly height: number;
+  /** 実際にアンチエイリアスが有効かどうか． */
+  readonly antialias: boolean;
 }
 
 export interface MotorSceneOptions {
@@ -69,6 +83,7 @@ export interface MotorSceneOptions {
   readonly portrait: boolean;
   /** 引き出し線の色．CSS の色表記で渡す． */
   readonly lineColor: string;
+  readonly quality: QualityOptions;
   /** 描画のたびに，番号ラベルと記号の位置を受け取る． */
   readonly onRender: (info: RenderInfo) => void;
 }
@@ -105,7 +120,13 @@ const FOCUS_MARGIN = 1.9;
 const VIEW_EASE_MS = 140;
 /** 目標との差がこの割合を下回ったら，視点の移動を終える． */
 const VIEW_SETTLE_RATIO = 0.002;
-const MAX_PIXEL_RATIO = 2;
+/** 描画の速さを求めるのに使うフレーム間隔の数． */
+const FRAME_METER_WINDOW = 30;
+/**
+ * これより長いフレーム間隔は，描画を止めていた時間とみなす（ミリ秒）．
+ * 遅い環境の間隔も測れるよう，長めに取る．
+ */
+const FRAME_METER_MAX_GAP_MS = 1000;
 const TONE_EXPOSURE = 0.95;
 const ENVIRONMENT_INTENSITY = 0.7;
 const KEY_LIGHT_INTENSITY = 1.1;
@@ -213,8 +234,24 @@ export function createMotorScene(
   canvas: HTMLCanvasElement,
   options: MotorSceneOptions,
 ): MotorScene {
-  const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
+  const { quality } = options;
+  const renderer = new WebGLRenderer({
+    canvas,
+    antialias: quality.antialias,
+    alpha: true,
+  });
+  renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, quality.maxPixelRatio),
+  );
+  const frameMeter = createFrameMeter(
+    FRAME_METER_WINDOW,
+    FRAME_METER_MAX_GAP_MS,
+  );
+  /** 描画先の画素数を受け取る入れ物．描画のたびに作り直さないよう使い回す． */
+  const bufferSize = new Vector2();
+  // 指定どおりにならない環境もあるため，実際の設定を問い合わせる．
+  const hasAntialias =
+    renderer.getContext().getContextAttributes()?.antialias === true;
   renderer.toneMapping = NeutralToneMapping;
   renderer.toneMappingExposure = TONE_EXPOSURE;
 
@@ -523,7 +560,15 @@ export function createMotorScene(
     }
     needsRender = false;
     renderer.render(scene, camera);
+    frameMeter.record(time);
+    renderer.getDrawingBufferSize(bufferSize);
     options.onRender({
+      frame: {
+        intervalMs: frameMeter.typicalIntervalMs(),
+        width: bufferSize.x,
+        height: bufferSize.y,
+        antialias: hasAntialias,
+      },
       labels: labelPositions(),
       labelOpacity: labelOpacity(shownFactor()),
       markers: markerPositions(),
