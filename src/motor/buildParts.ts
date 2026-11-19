@@ -10,7 +10,9 @@ import {
   MeshStandardMaterial,
   type Object3D,
   Path,
+  QuadraticBezierCurve3,
   Shape,
+  TubeGeometry,
   Vector2,
   Vector3,
 } from "three";
@@ -308,6 +310,64 @@ function coilLayerShape(): Shape {
   return shape;
 }
 
+/** 軸方向の位置・軸からの距離・軸まわりの角度で表した点を，モデルの座標へ直す． */
+function cylindrical(x: number, radius: number, angle: number): Vector3 {
+  return new Vector3(x, radius * Math.cos(angle), radius * Math.sin(angle));
+}
+
+/** 突起（極）が向く角度． */
+function poleAngle(pole: number): number {
+  return CORE.startAngle + (pole * FULL_TURN) / CORE.poleCount;
+}
+
+/**
+ * 銅片の中心が向く角度．
+ * 銅片は突起と突起の間にあり，銅片 n は突起 n と突起 n + 1 の間に位置する．
+ * 切れ目が突起の向きと合うため，上下のブラシは別の銅片へ触れる．
+ */
+function segmentAngle(segment: number): number {
+  return poleAngle(segment) + FULL_TURN / (2 * COMMUTATOR.segmentCount);
+}
+
+/** 引き出し線をつなぐ突起の，軸方向の中心． */
+const TAB_CENTER_X = COMMUTATOR.frontX - COMMUTATOR.tabLength / 2;
+/** 巻線が鉄心の後ろへはみ出した端の，軸方向の位置． */
+const COIL_REAR_X = CORE.rearX - WINDING.thickness;
+/** 引き出し線の付け根を巻線の中へ埋める深さ． */
+const LEAD_EMBED_DEPTH = 0.3;
+/** 引き出し線の曲がりの頂点を，巻線の端から後ろへずらす距離． */
+const LEAD_BEND_OFFSET = 0.9;
+
+/**
+ * 巻線の端から整流子の突起までの引き出し線を作る．
+ * side が +1 なら反時計回りの隣，-1 なら時計回りの隣の銅片へつなぐ．
+ */
+function createLead(pole: number, side: 1 | -1): BufferGeometry {
+  const coilRadius = (WINDING.innerRadius + WINDING.outerRadius) / 2;
+  const startRadius = Math.hypot(coilRadius, WINDING.leadOffset);
+  const startAngle =
+    poleAngle(pole) + side * Math.atan2(WINDING.leadOffset, coilRadius);
+  const endAngle = segmentAngle(side === 1 ? pole : pole - 1);
+
+  const path = new QuadraticBezierCurve3(
+    cylindrical(COIL_REAR_X + LEAD_EMBED_DEPTH, startRadius, startAngle),
+    cylindrical(
+      COIL_REAR_X - LEAD_BEND_OFFSET,
+      startRadius,
+      (startAngle + endAngle) / 2,
+    ),
+    cylindrical(TAB_CENTER_X, COMMUTATOR.tabOuterRadius, endAngle),
+  );
+  // 押し出しで作る層と同じ形式へそろえ，1 つのメッシュへまとめられるようにする．
+  return new TubeGeometry(
+    path,
+    ARC_SEGMENTS / 2,
+    WINDING.leadRadius,
+    6,
+    false,
+  ).toNonIndexed();
+}
+
 function buildWindings(): Object3D[] {
   const layerDepth =
     (WINDING.outerRadius - WINDING.innerRadius) / WINDING.layerCount;
@@ -325,66 +385,91 @@ function buildWindings(): Object3D[] {
   const centerX = (CORE.frontX + CORE.rearX) / 2;
   const axial = new Vector3(1, 0, 0);
 
-  const layers: BufferGeometry[] = [];
+  // 極ごとに流れる電流が異なるため，極ごとに別のメッシュと材質を持たせる．
+  const meshes: Mesh[] = [];
   for (let pole = 0; pole < CORE.poleCount; pole += 1) {
-    const angle = CORE.startAngle + (pole * FULL_TURN) / CORE.poleCount;
+    const angle = poleAngle(pole);
     const radial = new Vector3(0, Math.cos(angle), Math.sin(angle));
     const tangential = new Vector3(0, -Math.sin(angle), Math.cos(angle));
     // 層の断面の (幅，軸方向，重ねる方向) を，突起の (接線，x 軸，半径) へ向ける．
     const placement = new Matrix4().makeBasis(tangential, axial, radial);
 
+    const geometries = [createLead(pole, 1), createLead(pole, -1)];
     for (let layer = 0; layer < WINDING.layerCount; layer += 1) {
       const radius = WINDING.innerRadius + bevel + layer * layerDepth;
       placement.setPosition(
         radial.clone().multiplyScalar(radius).setX(centerX),
       );
-      layers.push(layerGeometry.clone().applyMatrix4(placement));
+      geometries.push(layerGeometry.clone().applyMatrix4(placement));
     }
+    const mesh = createMergedMesh(
+      "windings",
+      geometries,
+      metal(0xc56a33, 0.42),
+    );
+    mesh.userData.pole = pole;
+    meshes.push(mesh);
   }
-  return [
-    createPiece("windings", [
-      createMergedMesh("windings", layers, metal(0xc56a33, 0.42)),
-    ]),
-  ];
+  return [createPiece("windings", meshes)];
+}
+
+/** 引き出し線をつなぐ突起を，銅片の前端に作る． */
+function createTab(segment: number): BufferGeometry {
+  const angle = segmentAngle(segment);
+  // 銅片との間にすき間が見えないよう，根元を銅片の中へ少し埋める．
+  const innerRadius = COMMUTATOR.hubRadius;
+  const height = COMMUTATOR.tabOuterRadius - innerRadius;
+  const radial = new Vector3(0, Math.cos(angle), Math.sin(angle));
+  const tangential = new Vector3(0, -Math.sin(angle), Math.cos(angle));
+  // 直方体の (幅，高さ，奥行き) を，突起の (x 軸，半径，接線) へ向ける．
+  const placement = new Matrix4()
+    .makeBasis(new Vector3(1, 0, 0), radial, tangential)
+    .setPosition(cylindrical(TAB_CENTER_X, innerRadius + height / 2, angle));
+  return new BoxGeometry(COMMUTATOR.tabLength, height, COMMUTATOR.tabWidth)
+    .toNonIndexed()
+    .applyMatrix4(placement);
 }
 
 function buildCommutator(): Object3D[] {
   const insulator = circleShape(COMMUTATOR.hubRadius);
   insulator.holes.push(circlePath(SHAFT.radius));
-  const insulatorMesh = createMesh(
-    "commutator",
-    extrudeAlongX(
-      insulator,
-      COMMUTATOR.rearX - COMMUTATOR.hubOverhang,
-      COMMUTATOR.frontX + COMMUTATOR.hubOverhang,
+  const meshes = [
+    createMesh(
+      "commutator",
+      extrudeAlongX(
+        insulator,
+        COMMUTATOR.rearX - COMMUTATOR.hubOverhang,
+        COMMUTATOR.frontX + COMMUTATOR.hubOverhang,
+      ),
+      nonMetal(0x4d3d34, 0.8),
     ),
-    nonMetal(0x4d3d34, 0.8),
-  );
+  ];
 
-  const segments: BufferGeometry[] = [];
-  const segmentStep = FULL_TURN / COMMUTATOR.segmentCount;
-  // 銅片の切れ目を突起の向きへ合わせ，上下のブラシが別の銅片へ触れるようにする．
-  const firstCenter = CORE.startAngle + segmentStep / 2;
-  for (let index = 0; index < COMMUTATOR.segmentCount; index += 1) {
-    const segment = new Shape(
+  // 銅片ごとに電位が異なるため，銅片ごとに別のメッシュと材質を持たせる．
+  for (let segment = 0; segment < COMMUTATOR.segmentCount; segment += 1) {
+    const sector = new Shape(
       toVectors(
         ringSectorProfile({
           innerRadius: COMMUTATOR.hubRadius,
           outerRadius: COMMUTATOR.outerRadius,
-          centerAngle: firstCenter + index * segmentStep,
+          centerAngle: segmentAngle(segment),
           halfSpan: COMMUTATOR.segmentHalfSpan,
           segments: ARC_SEGMENTS / 2,
         }),
       ),
     );
-    segments.push(extrudeAlongX(segment, COMMUTATOR.rearX, COMMUTATOR.frontX));
+    const mesh = createMergedMesh(
+      "commutator",
+      [
+        extrudeAlongX(sector, COMMUTATOR.rearX, COMMUTATOR.frontX),
+        createTab(segment),
+      ],
+      metal(0xd98f58, 0.3),
+    );
+    mesh.userData.segment = segment;
+    meshes.push(mesh);
   }
-  return [
-    createPiece("commutator", [
-      insulatorMesh,
-      createMergedMesh("commutator", segments, metal(0xd98f58, 0.3)),
-    ]),
-  ];
+  return [createPiece("commutator", meshes)];
 }
 
 /** 上側（+1）と下側（-1）．2 個の部品は軸について点対称に置く． */

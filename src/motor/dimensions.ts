@@ -58,6 +58,10 @@ export const WINDING = {
   /** 柱の側面からの巻きの厚み． */
   thickness: 1.9,
   layerCount: 5,
+  /** 整流子へつなぐ引き出し線の半径． */
+  leadRadius: 0.2,
+  /** 引き出し線が巻線から出る位置の，突起の中心からの接線方向の距離． */
+  leadOffset: 2.2,
 } as const;
 
 export const COMMUTATOR = {
@@ -69,6 +73,12 @@ export const COMMUTATOR = {
   frontX: -6.5,
   /** 絶縁体の筒が銅片より前後へはみ出す長さ． */
   hubOverhang: 0.2,
+  /** 巻線の引き出し線をつなぐ突起の，軸からの高さ． */
+  tabOuterRadius: 3.4,
+  /** 突起の接線方向の幅． */
+  tabWidth: 0.9,
+  /** 突起の軸方向の長さ．銅片の前端から後ろへ伸びる． */
+  tabLength: 0.6,
 } as const;
 
 export const BRUSH = {
