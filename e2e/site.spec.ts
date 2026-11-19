@@ -294,6 +294,38 @@ test.describe("マウスでの操作", () => {
     await expect(page.locator("#part-info")).toBeHidden();
   });
 
+  test("マウスを動かすだけでは，固定した解説の内容を書き換えない", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "10 エンドベル" }).click();
+    await page.evaluate(() => {
+      const panel = document.querySelector("#part-info");
+      if (panel === null) {
+        throw new Error("解説欄が見つからない");
+      }
+      const state = { count: 0 };
+      new MutationObserver((records) => {
+        state.count += records.length;
+      }).observe(panel, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+      Object.assign(window, { panelMutations: state });
+    });
+    const center = await canvasCenter(page);
+    for (let step = 0; step < 10; step += 1) {
+      await page.mouse.move(center.x + step * 8, center.y + step * 3);
+      await waitForFrames(page);
+    }
+    const count = await page.evaluate(
+      () =>
+        (window as unknown as { panelMutations: { count: number } })
+          .panelMutations.count,
+    );
+    expect(count).toBe(0);
+  });
+
   test("右クリックでは部品を選択しない", async ({ page }) => {
     const center = await canvasCenter(page);
     await page.mouse.click(center.x, center.y, { button: "right" });

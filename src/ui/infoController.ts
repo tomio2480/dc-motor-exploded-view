@@ -48,19 +48,26 @@ export function createInfoController(
     options;
   let selection: SelectionState = INITIAL_SELECTION;
   let pointer: Point | null = null;
+  /** 各欄へ表示中の部品．同じ部品を表示し直して描画をやり直させないために持つ． */
+  let shownInPanel: PartId | null = null;
+  let shownInTooltip: PartId | null = null;
 
   function renderTooltip(): void {
     const hovered = selection.hovered;
     // 固定して表示している部品と同じ内容は，吹き出しで繰り返さない．
-    if (
-      hovered === null ||
-      hovered === selection.selected ||
-      pointer === null
-    ) {
-      tooltip.hide();
+    const target =
+      hovered === selection.selected || pointer === null ? null : hovered;
+    if (target === null || pointer === null) {
+      if (shownInTooltip !== null) {
+        tooltip.hide();
+        shownInTooltip = null;
+      }
       return;
     }
-    tooltip.show(getPart(hovered));
+    if (target !== shownInTooltip) {
+      tooltip.show(getPart(target));
+      shownInTooltip = target;
+    }
     const size = tooltipElement.getBoundingClientRect();
     const placement = placeTooltip({
       pointer,
@@ -73,11 +80,15 @@ export function createInfoController(
   }
 
   function renderPanel(): void {
-    if (selection.selected === null) {
+    if (selection.selected === shownInPanel) {
+      return;
+    }
+    shownInPanel = selection.selected;
+    if (shownInPanel === null) {
       panel.hide();
       return;
     }
-    panel.show(getPart(selection.selected));
+    panel.show(getPart(shownInPanel));
   }
 
   function render(): void {
