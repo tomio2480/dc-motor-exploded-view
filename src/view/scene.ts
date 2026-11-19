@@ -274,6 +274,11 @@ export function createMotorScene(
   controls.addEventListener("start", () => {
     goal = null;
   });
+  // OrbitControls は入力の処理の中でも視点を更新する．
+  // 描画ループでの update() の戻り値だけでは，その変化を取りこぼす．
+  controls.addEventListener("change", () => {
+    needsRender = true;
+  });
 
   // 縦長の画面では軸を縦へ向けるため，モデル全体をこのグループごと回す．
   const root = new Group();
@@ -554,8 +559,9 @@ export function createMotorScene(
       return;
     }
     advanceGoal(elapsedMs);
-    const hasMoved = controls.update();
-    if (!needsRender && !hasMoved) {
+    // 減衰の途中の動きを進める．視点が変われば change の通知が描画を求める．
+    controls.update();
+    if (!needsRender) {
       return;
     }
     needsRender = false;

@@ -3,6 +3,15 @@ import { expect, type Page, test } from "@playwright/test";
 import { openSite, waitForFrames } from "./helpers";
 
 const PART_COUNT = 10;
+/** ドラッグ中に視点が動いたとみなす，番号ラベルの移動量（px）． */
+const DRAG_VISIBLE_MOVE_PX = 5;
+/** 部品のない位置からドラッグを始めるための，描画領域の中央からの下向きのずれ（px）． */
+const DRAG_START_OFFSET_PX = 150;
+const DRAG_LENGTH_PX = 120;
+/** 狭い画面の中でなぞる長さ（px）． */
+const TOUCH_DRAG_LENGTH_PX = 80;
+const DRAG_STEPS = 6;
+const WHEEL_ZOOM_DELTA = 300;
 const ANIMATION_TIMEOUT_MS = 20_000;
 
 async function canvasCenter(page: Page): Promise<{ x: number; y: number }> {
@@ -12,6 +21,34 @@ async function canvasCenter(page: Page): Promise<{ x: number; y: number }> {
   }
   // 画面の中央には，展開しても動かない回転子がある．
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/** 視点の変化を確かめる目印として，軸受の番号ラベルの位置を返す． */
+async function bearingLabelPosition(
+  page: Page,
+): Promise<{ x: number; y: number }> {
+  await waitForFrames(page);
+  const box = await page.getByRole("button", { name: "1 軸受" }).boundingBox();
+  if (box === null) {
+    throw new Error("番号ラベルの位置を取得できない");
+  }
+  return { x: box.x, y: box.y };
+}
+
+/** 部品のない位置でボタンを押し，離さずに横へ動かす． */
+async function pressAndDrag(page: Page): Promise<void> {
+  const center = await canvasCenter(page);
+  const y = center.y + DRAG_START_OFFSET_PX;
+  await page.mouse.move(center.x, y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + DRAG_LENGTH_PX, y, { steps: DRAG_STEPS });
+}
+
+function distanceBetween(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 /** 2 つの番号ラベルの間隔を，表示の拡大率の目安として返す． */
@@ -283,6 +320,27 @@ test.describe("マウスでの操作", () => {
     );
   });
 
+  test("ドラッグしている間も，視点の変化を表示へ反映する", async ({ page }) => {
+    const before = await bearingLabelPosition(page);
+    await pressAndDrag(page);
+    // ボタンを離す前に，番号の位置が視点の回転へ追従していることを確かめる．
+    const during = await bearingLabelPosition(page);
+    await page.mouse.up();
+    expect(distanceBetween(before, during)).toBeGreaterThan(
+      DRAG_VISIBLE_MOVE_PX,
+    );
+  });
+
+  test("ホイールでの拡大を，マウスを動かさなくても表示へ反映する", async ({
+    page,
+  }) => {
+    const center = await canvasCenter(page);
+    await page.mouse.move(center.x, center.y + DRAG_START_OFFSET_PX);
+    const before = await labelSpan(page);
+    await page.mouse.wheel(0, -WHEEL_ZOOM_DELTA);
+    expect(await labelSpan(page)).toBeGreaterThan(before);
+  });
+
   test("視点をドラッグし始めると吹き出しを閉じる", async ({ page }) => {
     const center = await canvasCenter(page);
     await page.mouse.move(center.x, center.y);
@@ -330,6 +388,59 @@ test.describe("マウスでの操作", () => {
     const center = await canvasCenter(page);
     await page.mouse.click(center.x, center.y, { button: "right" });
     await expect(page.locator("#part-info")).toBeHidden();
+  });
+});
+
+test("動きを減らさない設定でも，ドラッグしている間に表示が追従する", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "マウス操作の検証である");
+  await page.goto("./");
+  await expect(page.getByLabel("展開の度合い")).toHaveValue("100", {
+    timeout: ANIMATION_TIMEOUT_MS,
+  });
+  const before = await bearingLabelPosition(page);
+  await pressAndDrag(page);
+  const during = await bearingLabelPosition(page);
+  await page.mouse.up();
+  expect(distanceBetween(before, during)).toBeGreaterThan(DRAG_VISIBLE_MOVE_PX);
+});
+
+test.describe("指での操作", () => {
+  // 指の押下から移動までを個別に送るため，Chromium の DevTools Protocol を使う．
+  test.skip(
+    ({ browserName, hasTouch }) => browserName !== "chromium" || !hasTouch,
+    "Chromium のタッチ画面での検証である",
+  );
+
+  test("指でなぞっている間も，視点の変化を表示へ反映する", async ({ page }) => {
+    await openSite(page);
+    const before = await bearingLabelPosition(page);
+    const center = await canvasCenter(page);
+    const session = await page.context().newCDPSession(page);
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [center],
+    });
+    // 縦長の画面では軸が縦を向き，横になぞるだけでは軸上の番号が動かない．
+    // 斜めになぞって，縦の回転も加える．
+    for (let step = 1; step <= DRAG_STEPS; step += 1) {
+      const travelled = (TOUCH_DRAG_LENGTH_PX * step) / DRAG_STEPS;
+      await session.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: center.x + travelled, y: center.y + travelled }],
+      });
+    }
+    // 指を離す前に，番号の位置が視点の回転へ追従していることを確かめる．
+    const during = await bearingLabelPosition(page);
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    expect(distanceBetween(before, during)).toBeGreaterThan(
+      DRAG_VISIBLE_MOVE_PX,
+    );
   });
 });
 
