@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      # Node.js の型定義は，CI で使う 22 系（対応する最も古い系）へ合わせる．
+      # 新しい系の型では，22 系にない API を使っても型検査を通ってしまう．
+      # 対応から 22 系を外したら，型定義は残る系のうち最も古い系へ手動で上げる．
+      # 除外を外すと最新の major が提案されるため，除外は残す．
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
