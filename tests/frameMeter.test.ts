@@ -56,6 +56,46 @@ describe("createFrameMeter", () => {
     expect(meter.typicalIntervalMs()).toBeCloseTo(20);
   });
 
+  test("続けて描画していれば，上限より長い間隔も測る", () => {
+    const meter = createFrameMeter(WINDOW_SIZE, 1000);
+    meter.record(0);
+    meter.record(500, true);
+    for (const time of [2000, 3500, 5000]) {
+      meter.record(time, true);
+    }
+    expect(meter.typicalIntervalMs()).toBeCloseTo(1500);
+  });
+
+  test("最初の描画の直後の長い間隔は，続けて描画していても測り直す", () => {
+    const meter = createFrameMeter(WINDOW_SIZE, 1000);
+    meter.record(0);
+    // 最初の描画は，シェーダーの準備など 1 回きりの処理を含みうる．
+    meter.record(12000, true);
+    expect(meter.typicalIntervalMs()).toBeNull();
+    meter.record(13500, true);
+    expect(meter.typicalIntervalMs()).toBeCloseTo(1500);
+  });
+
+  test("描画を休んだ後は，再開した直後の間隔から上限によらず測る", () => {
+    const meter = createFrameMeter(WINDOW_SIZE, 1000);
+    for (const time of [0, 400, 800]) {
+      meter.record(time, time > 0);
+    }
+    meter.record(5000);
+    expect(meter.typicalIntervalMs()).toBeNull();
+    meter.record(6500, true);
+    expect(meter.typicalIntervalMs()).toBeCloseTo(1500);
+  });
+
+  test("続けて描画していない長い間隔では，それまでの値を捨てて測り直す", () => {
+    const meter = createFrameMeter(WINDOW_SIZE, 1000);
+    meter.record(0);
+    meter.record(400, true);
+    meter.record(1900, true);
+    meter.record(5000);
+    expect(meter.typicalIntervalMs()).toBeNull();
+  });
+
   test.each([{ size: 0 }, { size: -1 }, { size: 1.5 }])(
     "使う間隔の数 $size は拒否する",
     ({ size }) => {

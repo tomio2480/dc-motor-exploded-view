@@ -124,7 +124,7 @@ const VIEW_SETTLE_RATIO = 0.002;
 const FRAME_METER_WINDOW = 30;
 /**
  * これより長いフレーム間隔は，描画を止めていた時間とみなす（ミリ秒）．
- * 遅い環境の間隔も測れるよう，長めに取る．
+ * 最初の描画の直後を除き，続けて描画した間隔は，この値によらず数える．
  */
 const FRAME_METER_MAX_GAP_MS = 1000;
 const TONE_EXPOSURE = 0.95;
@@ -350,6 +350,8 @@ export function createMotorScene(
   let mechanismView = INITIAL_MECHANISM_VIEW;
   let highlighted: PartId | null = null;
   let needsRender = true;
+  /** 直前のフレームで描画したか．描画の速さを測るときに，止めていた時間と区別する． */
+  let renderedLastFrame = false;
   const raycaster = new Raycaster();
 
   /** 回るしくみの表示では，利用者が選んだ展開度によらず組立状態で示す． */
@@ -554,6 +556,8 @@ export function createMotorScene(
     requestAnimationFrame(renderFrame);
     const elapsedMs = lastFrameTime === null ? 0 : time - lastFrameTime;
     lastFrameTime = time;
+    const followsRender = renderedLastFrame;
+    renderedLastFrame = false;
     if (fitted === null) {
       // 描画領域がまだ大きさを持たない間は，画角を決められない．
       return;
@@ -566,7 +570,9 @@ export function createMotorScene(
     }
     needsRender = false;
     renderer.render(scene, camera);
-    frameMeter.record(time);
+    renderedLastFrame = true;
+    // 描画の遅い環境でも測れるよう，続けて描画したかを計器へ渡す．
+    frameMeter.record(time, followsRender);
     renderer.getDrawingBufferSize(bufferSize);
     options.onRender({
       frame: {
@@ -590,6 +596,12 @@ export function createMotorScene(
       material.emissiveIntensity = intensity;
     }
   }
+
+  // ページを隠すと rAF も止まる．戻った直後の間隔は隠していた時間を含むため，続けた描画とみなさない．
+  // 隠れている間に rAF が呼ばれた場合にも備え，隠れたときと見えるようになったときの両方で戻す．
+  document.addEventListener("visibilitychange", () => {
+    renderedLastFrame = false;
+  });
 
   applyFactor();
   placeDefaultView();
